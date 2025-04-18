@@ -1,129 +1,103 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
 from django.conf import settings
 import json
 import os
-import uuid
-
+import logging
 from .services import ChatbotService
-from .models import ChatSession
 
-@ensure_csrf_cookie
+logger = logging.getLogger(__name__)
+chatbot_service = ChatbotService()
+
 def chatbot_view(request):
     """Render the chatbot interface"""
     # Get or create a chat session for this user
-    chatbot_service = ChatbotService()
-    if request.user.is_authenticated:
-        session = chatbot_service.get_or_create_session(request.user)
-    else:
-        # For anonymous users, try to get session from cookies
-        session_id = request.COOKIES.get('chat_session_id')
-        if session_id:
-            try:
-                session = ChatSession.objects.get(session_id=session_id)
-            except ChatSession.DoesNotExist:
-                session = chatbot_service.get_or_create_session()
-        else:
-            session = chatbot_service.get_or_create_session()
+    session = chatbot_service.get_or_create_session(request.user)
     
     # Get chat history
-    messages = chatbot_service.get_chat_history(session)
+    chat_history = chatbot_service.get_chat_history(session)
     
     context = {
-        'chat_session': session,
-        'messages': messages,
+        'chat_history': chat_history,
+        'session_id': session.session_id,
     }
     
-    response = render(request, 'chatbot/chat.html', context)
-    
-    # Set cookie for anonymous users
-    if not request.user.is_authenticated:
-        response.set_cookie('chat_session_id', session.session_id, max_age=3600*24*7)  # 7 days
-    
-    return response
+    return render(request, 'chatbot/chat.html', context)
 
+@csrf_exempt
 @require_POST
 def send_message_api(request):
     """API endpoint to send a message to the chatbot"""
     try:
         data = json.loads(request.body)
-        message = data.get('message', '').strip()
+        message_text = data.get('message', '').strip()
+        session_id = data.get('session_id', '')
         
-        if not message:
-            return JsonResponse({'error': 'Message cannot be empty'}, status=400)
+        if not message_text:
+            return JsonResponse({'error': 'Message text is required'}, status=400)
         
-        # Get the session
-        chatbot_service = ChatbotService()
-        if request.user.is_authenticated:
-            session = chatbot_service.get_or_create_session(request.user)
-        else:
-            session_id = request.COOKIES.get('chat_session_id')
-            try:
-                session = ChatSession.objects.get(session_id=session_id)
-            except (ChatSession.DoesNotExist, TypeError):
-                return JsonResponse({'error': 'Invalid session'}, status=400)
+        # Get the session by ID
+        try:
+            from .models import ChatSession
+            session = ChatSession.objects.get(session_id=session_id)
+        except ChatSession.DoesNotExist:
+            # Create a new session if one doesn't exist
+            session = chatbot_service.get_or_create_session(request.user if request.user.is_authenticated else None)
         
-        # Process the message
-        result = chatbot_service.send_message(session, message)
+        # Send the message to the chatbot service
+        response = chatbot_service.send_message(session, message_text)
         
-        if result['success']:
-            return JsonResponse({
-                'user_message': {
-                    'content': result['user_message'].content,
-                    'timestamp': result['user_message'].timestamp.isoformat(),
-                },
-                'assistant_message': {
-                    'content': result['assistant_message'].content,
-                    'timestamp': result['assistant_message'].timestamp.isoformat(),
-                }
-            })
-        else:
-            return JsonResponse({
-                'error': 'Failed to get response',
-                'message': result['assistant_message'].content
-            }, status=500)
-            
+        # Return the response
+        return JsonResponse({
+            'success': response['success'],
+            'message': response['assistant_message'].content,
+            'timestamp': response['assistant_message'].timestamp.isoformat(),
+        })
+    
     except Exception as e:
+        logger.error(f"Error in send_message_api: {e}")
         return JsonResponse({'error': str(e)}, status=500)
-        
+
+@csrf_exempt
 @require_POST
 def upload_document(request):
     """Handle document uploads for the chatbot"""
-    if not request.FILES.get('document'):
-        messages.error(request, 'Please select a document to upload')
-        return redirect('chatbot:chat')
+    if 'document' not in request.FILES:
+        return JsonResponse({'error': 'No document uploaded'}, status=400)
     
     document = request.FILES['document']
     
     # Check file extension
-    if not document.name.endswith('.pdf'):
-        messages.error(request, 'Only PDF files are supported')
-        return redirect('chatbot:chat')
+    if not document.name.lower().endswith('.pdf'):
+        return JsonResponse({'error': 'Only PDF files are allowed'}, status=400)
     
     # Create documents directory if it doesn't exist
-    documents_dir = os.path.join(settings.BASE_DIR, 'documents')
+    documents_dir = os.path.join('documents')
     if not os.path.exists(documents_dir):
         os.makedirs(documents_dir)
     
-    # Generate a unique filename to avoid collisions
-    filename = f"{uuid.uuid4().hex}-{document.name}"
-    file_path = os.path.join(documents_dir, filename)
-    
-    # Save the file
-    with open(file_path, 'wb+') as destination:
-        for chunk in document.chunks():
-            destination.write(chunk)
-    
-    # Process documents to update vector store
+    # Save the document
+    document_path = os.path.join(documents_dir, document.name)
     try:
-        chatbot_service = ChatbotService()
-        chatbot_service.document_processor.process_documents()
-        messages.success(request, 'Document uploaded successfully. You can now ask questions about it.')
+        with open(document_path, 'wb+') as destination:
+            for chunk in document.chunks():
+                destination.write(chunk)
     except Exception as e:
-        messages.error(request, f'Error processing document: {str(e)}')
+        logger.error(f"Error saving document: {e}")
+        return JsonResponse({'error': f'Error saving document: {str(e)}'}, status=500)
     
-    return redirect('chatbot:chat')
+    # Process the document
+    try:
+        result = chatbot_service.document_processor.process_documents()
+        return JsonResponse({
+            'success': True,
+            'message': f'Document uploaded and processed successfully. {result}',
+            'document_name': document.name
+        })
+    except Exception as e:
+        logger.error(f"Error processing document: {e}")
+        return JsonResponse({'error': f'Document uploaded but error during processing: {str(e)}'}, status=500)
