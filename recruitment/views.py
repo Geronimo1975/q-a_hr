@@ -9,6 +9,7 @@ from .models import Answer, Question, QuestionStage, ApplicationSource, Applican
 from accounts.models import CustomUser
 from utils.google_sheets import update_sheet_with_answers
 from utils.sheets_direct import update_sheet_with_answers as update_sheet_direct
+from utils.google_sheets_service import update_sheet_with_answers as update_sheet_service
 
 
 @login_required
@@ -87,8 +88,21 @@ def questionnaire(request, stage=1):
             if settings.GOOGLE_SHEETS.get('enabled', False):
                 sheet_id = settings.GOOGLE_SHEETS.get('spreadsheet_id')
                 if sheet_id:
-                    sheets_updated = update_sheet_with_answers(user, stage, sheet_id)
-                    if not sheets_updated:
+                    # Try using the service account method first
+                    try:
+                        sheets_updated = update_sheet_service(user, stage, sheet_id)
+                        if not sheets_updated:
+                            # Fall back to direct API key method
+                            sheets_updated = update_sheet_direct(user, stage, sheet_id)
+                            
+                        if not sheets_updated:
+                            # If both methods fail, try the original OAuth method
+                            sheets_updated = update_sheet_with_answers(user, stage, sheet_id)
+                            
+                        if not sheets_updated:
+                            messages.warning(request, "Responses were saved locally but could not be exported to Google Sheets.")
+                    except Exception as e:
+                        print(f"Error exporting to Google Sheets: {e}")
                         messages.warning(request, "Responses were saved locally but could not be exported to Google Sheets.")
             
             # Send email notification
