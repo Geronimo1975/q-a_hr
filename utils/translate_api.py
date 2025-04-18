@@ -4,9 +4,10 @@ import json
 import requests
 from django.utils.safestring import mark_safe
 from django.utils.translation import get_language
+from django.conf import settings
 
 # Google Translate API settings
-API_KEY = os.environ.get('GOOGLE_TRANSLATE_API_KEY', '')
+API_KEY = settings.GOOGLE_TRANSLATE_API_KEY
 TRANSLATE_URL = 'https://translation.googleapis.com/language/translate/v2'
 
 def translate_text(text, target_language=None, source_language=None):

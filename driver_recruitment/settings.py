@@ -56,6 +56,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
+    'utils.middleware.GoogleTranslationMiddleware',  # Add Google Translation middleware
 ]
 
 ROOT_URLCONF = 'driver_recruitment.urls'
@@ -199,3 +200,6 @@ GOOGLE_SHEETS = {
 # OpenAI API Configuration
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-3.5-turbo')
+
+# Google Translate API Configuration
+GOOGLE_TRANSLATE_API_KEY = os.environ.get('GOOGLE_TRANSLATE_API_KEY', '')
