@@ -109,6 +109,10 @@ def update_sheet_with_answers(user, stage, spreadsheet_id, api_key=None):
             question__stage__stage_number=stage
         ).order_by('question__order')
         
+        if not answers:
+            print(f"No answers found for user {user.email}, stage {stage}")
+            return False
+        
         # Prepare data for Google Sheets
         row_data = [
             user.email,
@@ -117,35 +121,39 @@ def update_sheet_with_answers(user, stage, spreadsheet_id, api_key=None):
             datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ]
         
-        # Add each answer to the row
+        # Create a dictionary to store answers by question order
+        answer_by_order = {}
         for answer in answers:
-            question_type = answer.question.question_type
-            
-            if question_type == 'file' and answer.file_upload:
-                # For file uploads, include a link to the file if possible
-                if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
-                    file_url = f"{settings.BASE_URL}{answer.file_upload.url}"
-                else:
-                    # If BASE_URL is not set, use a relative path with a note
-                    file_url = f"[FILE UPLOADED: {answer.file_upload.name}]"
+            answer_by_order[answer.question.order] = answer
+        
+        # Add each answer to the row, ensuring all 10 questions are represented
+        for order in range(1, 11):
+            if order in answer_by_order:
+                answer = answer_by_order[order]
+                question_type = answer.question.question_type
                 
-                row_data.append(f"{answer.question.question_text}: {file_url}")
-            elif question_type == 'dob' and answer.answer_text:
-                # Format date of birth in German format (DD.MM.YYYY)
-                try:
-                    from datetime import datetime
-                    date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
-                    formatted_date = date_obj.strftime('%d.%m.%Y')
-                    row_data.append(f"{answer.question.question_text}: {formatted_date}")
-                except:
-                    row_data.append(f"{answer.question.question_text}: {answer.answer_text}")
-            elif question_type == 'phone' and answer.answer_text:
-                # Format phone number for better readability
-                formatted_phone = answer.answer_text.replace('+49', '+49 ')
-                row_data.append(f"{answer.question.question_text}: {formatted_phone}")
+                if question_type == 'file' and answer.file_upload:
+                    # For file uploads, include a note
+                    row_data.append(f"File uploaded: {answer.file_upload.name}")
+                elif question_type == 'dob' and answer.answer_text:
+                    # Format date of birth in German format (DD.MM.YYYY)
+                    try:
+                        from datetime import datetime
+                        date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
+                        formatted_date = date_obj.strftime('%d.%m.%Y')
+                        row_data.append(formatted_date)
+                    except:
+                        row_data.append(answer.answer_text)
+                elif question_type == 'phone' and answer.answer_text:
+                    # Format phone number for better readability
+                    formatted_phone = answer.answer_text.replace('+49', '+49 ')
+                    row_data.append(formatted_phone)
+                else:
+                    # Standard formatting for other question types
+                    row_data.append(answer.answer_text)
             else:
-                # Standard formatting for other question types
-                row_data.append(f"{answer.question.question_text}: {answer.answer_text}")
+                # No answer for this question order
+                row_data.append("")
         
         # Append the row to Google Sheet
         sheet_name = f"Stage{stage}"
