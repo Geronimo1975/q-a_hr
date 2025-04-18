@@ -70,6 +70,14 @@
     {% endif %}
 
     {% block content %}{% endblock %}
+    
+    <!-- Floating Chatbot Button -->
+    <div class="chatbot-button" id="chatbotButton">
+        <a href="{% url 'chatbot:chat' %}" class="btn btn-primary rounded-circle shadow-lg d-flex align-items-center justify-content-center">
+            <i class="bi bi-chat-dots-fill"></i>
+        </a>
+        <div class="chatbot-tooltip">How can I help?</div>
+    </div>
 
     <footer class="text-center text-lg-start mt-5">
         <div class="container p-4">

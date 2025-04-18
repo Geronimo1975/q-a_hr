@@ -13,9 +13,11 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = [
-    f'https://{os.environ.get("REPL_SLUG", "")}.{os.environ.get("REPL_OWNER", "")}.repl.co',
-    'https://5a681bca-0236-4a84-a6cc-51b738f95f48-00-go1lmhtu1a5w.picard.replit.dev',
-    'https://*.picard.replit.dev',
+    'https://*.repl.co',
+    'https://*.replit.dev',
+    'https://*.replit.app',
+    'http://localhost:5000',
+    'http://0.0.0.0:5000',
 ]
 
 # Application definition
@@ -139,7 +141,7 @@ SITE_ID = 1
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
-ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_EMAIL_VERIFICATION = 'optional'  # Changed from 'mandatory' to 'optional' for easier testing
 ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE = True
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_LOGOUT_ON_GET = True

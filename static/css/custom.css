@@ -166,6 +166,44 @@ footer a:hover {
   box-shadow: 0 0 0 0.25rem rgba(52, 152, 219, 0.25);
 }
 
+/* Chatbot Button Styling */
+.chatbot-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+
+.chatbot-button a {
+  width: 60px;
+  height: 60px;
+  font-size: 24px;
+  transition: all 0.3s ease;
+}
+
+.chatbot-button a:hover {
+  transform: scale(1.1);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2) !important;
+}
+
+.chatbot-tooltip {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background-color: white;
+  color: var(--dark-color);
+  padding: 8px 15px;
+  border-radius: 20px;
+  font-size: 14px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.chatbot-button:hover .chatbot-tooltip {
+  opacity: 1;
+}
+
 /* Mobile responsiveness */
 @media (max-width: 768px) {
   .hero-bg {
@@ -181,5 +219,11 @@ footer a:hover {
   
   .display-4 {
     font-size: 2.5rem;
+  }
+  
+  .chatbot-button a {
+    width: 50px;
+    height: 50px;
+    font-size: 20px;
   }
 }
