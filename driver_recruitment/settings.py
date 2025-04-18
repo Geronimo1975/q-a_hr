@@ -220,3 +220,16 @@ CSRF_TRUSTED_ORIGINS = [
 
 # Set this to False to disable the CSRF debug page
 CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'
+
+# Securitate pentru cookies
+# În mediul de dezvoltare, dezactivăm temporar unele măsuri de securitate
+# În producție, acestea ar trebui reactivate
+CSRF_COOKIE_SECURE = False  # În dezvoltare, permitem și HTTP
+CSRF_COOKIE_HTTPONLY = True  # Nu permite accesul JavaScript la cookie
+CSRF_USE_SESSIONS = False   # În dezvoltare, folosim cookie-uri pentru CSRF tokens
+CSRF_COOKIE_SAMESITE = 'Lax'  # Restricționează cookie-urile cross-site
+
+# Ajustări pentru mediul de producție
+# Când site-ul este în producție, acestea ar trebui activate:
+# CSRF_COOKIE_SECURE = True  # Folosit doar peste HTTPS
+# CSRF_USE_SESSIONS = True  # Stochează CSRF token în sesiune în loc de cookie
