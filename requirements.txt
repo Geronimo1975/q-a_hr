@@ -1,0 +1,4 @@
+
+django
+fpdf
+requests

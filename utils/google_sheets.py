@@ -150,6 +150,9 @@ def update_sheet_with_answers(user, stage, sheet_id):
                 # Standard formatting for other question types
                 row_data.append(f"{answer.question.question_text}: {answer.answer_text}")
         
+        # Ensure the sheet exists first
+        create_sheet_if_needed(sheet_id)
+        
         # Append the row to Google Sheet
         sheet_name = f"Stage{stage}"
         result = append_row(row_data, sheet_id, f"{sheet_name}!A:Z")
