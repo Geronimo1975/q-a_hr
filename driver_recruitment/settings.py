@@ -15,6 +15,8 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = [
     'fastdelivery.gtl-europe.de',
     'www.fastdelivery.gtl-europe.de',
+    'fastdelivery.gti-europe.de',  # Versiunea corectă pentru dispozitive mobile
+    'www.fastdelivery.gti-europe.de',
     'localhost',
     '127.0.0.1',
     '0.0.0.0',
@@ -226,10 +228,19 @@ TRANSLATION_DEBUG = True  # Whether to log translation requests and responses
 
 # CSRF Settings
 CSRF_TRUSTED_ORIGINS = [
+    # Domeniul original gtl-europe.de
     'https://fastdelivery.gtl-europe.de',
     'http://fastdelivery.gtl-europe.de', 
     'https://fastdelivery.gtl-europe.de:*',
     'http://fastdelivery.gtl-europe.de:*',
+    
+    # Domeniul mobil gti-europe.de
+    'https://fastdelivery.gti-europe.de',
+    'http://fastdelivery.gti-europe.de', 
+    'https://fastdelivery.gti-europe.de:*',
+    'http://fastdelivery.gti-europe.de:*',
+    
+    # Domenii Replit pentru dezvoltare
     'https://*.replit.app',
     'http://*.replit.app',
     'https://*.replit.dev',
