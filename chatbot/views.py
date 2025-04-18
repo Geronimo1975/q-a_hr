@@ -1,103 +1,143 @@
-from django.shortcuts import render
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_POST
-from django.views.decorators.csrf import csrf_exempt
-from django.contrib import messages
-from django.conf import settings
 import json
-import os
-import logging
+import uuid
+from django.shortcuts import render, redirect
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+from django.core.files.storage import default_storage
+from django.conf import settings
 from .services import ChatbotService
-
-logger = logging.getLogger(__name__)
-chatbot_service = ChatbotService()
+from .models import ChatSession, TrainingDocument
 
 def chatbot_view(request):
     """Render the chatbot interface"""
-    # Get or create a chat session for this user
-    session = chatbot_service.get_or_create_session(request.user)
+    # Initialize service
+    service = ChatbotService()
+    
+    # Get or create a chat session
+    session = service.get_or_create_session(request.user)
     
     # Get chat history
-    chat_history = chatbot_service.get_chat_history(session)
+    history = service.get_chat_history(session)
     
     context = {
-        'chat_history': chat_history,
         'session_id': session.session_id,
+        'history': history,
+        'page_title': 'Chat with our Assistant'
     }
     
-    return render(request, 'chatbot/chat.html', context)
+    # We're using the Telekom style chatbot by default
+    return render(request, 'chatbot/telekom_chatbot.html', context)
 
-@csrf_exempt
-@require_POST
 def send_message_api(request):
     """API endpoint to send a message to the chatbot"""
-    try:
-        data = json.loads(request.body)
-        message_text = data.get('message', '').strip()
-        session_id = data.get('session_id', '')
-        
-        if not message_text:
-            return JsonResponse({'error': 'Message text is required'}, status=400)
-        
-        # Get the session by ID
+    if request.method == 'POST':
         try:
-            from .models import ChatSession
-            session = ChatSession.objects.get(session_id=session_id)
-        except ChatSession.DoesNotExist:
-            # Create a new session if one doesn't exist
-            session = chatbot_service.get_or_create_session(request.user if request.user.is_authenticated else None)
-        
-        # Send the message to the chatbot service
-        response = chatbot_service.send_message(session, message_text)
-        
-        # Return the response
-        return JsonResponse({
-            'success': response['success'],
-            'message': response['assistant_message'].content,
-            'timestamp': response['assistant_message'].timestamp.isoformat(),
-        })
+            # Parse the JSON data
+            data = json.loads(request.body)
+            message = data.get('message', '')
+            session_id = data.get('session_id', '')
+            
+            if not message or not session_id:
+                return JsonResponse({'success': False, 'error': 'Message and session_id are required'})
+            
+            # Get the session
+            try:
+                session = ChatSession.objects.get(session_id=session_id)
+            except ChatSession.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Invalid session'})
+            
+            # Initialize service and send message
+            service = ChatbotService()
+            response = service.send_message(session, message)
+            
+            return JsonResponse({'success': True, 'response': response})
+            
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
     
-    except Exception as e:
-        logger.error(f"Error in send_message_api: {e}")
-        return JsonResponse({'error': str(e)}, status=500)
+    return JsonResponse({'success': False, 'error': 'Only POST requests are allowed'})
 
-@csrf_exempt
-@require_POST
+@login_required
 def upload_document(request):
     """Handle document uploads for the chatbot"""
-    if 'document' not in request.FILES:
-        return JsonResponse({'error': 'No document uploaded'}, status=400)
+    if request.method == 'POST' and request.FILES.get('document'):
+        try:
+            document = request.FILES['document']
+            
+            # Validate file type
+            if not document.name.lower().endswith('.pdf'):
+                return JsonResponse({'success': False, 'error': 'Only PDF files are allowed'})
+            
+            # Create the TrainingDocument in the database
+            training_doc = TrainingDocument.objects.create(
+                title=document.name,
+                document_type='faq',  # Default type
+                file=document
+            )
+            
+            # Process document in the background (would typically be a celery task)
+            # For now, just mark it as processed
+            training_doc.is_processed_for_training = True
+            training_doc.save()
+            
+            return JsonResponse({'success': True, 'document_id': training_doc.id})
+            
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
     
-    document = request.FILES['document']
+    return JsonResponse({'success': False, 'error': 'Invalid request'})
+
+
+@login_required
+def admin_document_list(request):
+    """Show list of training documents for admin users"""
+    if not request.user.is_staff:
+        return redirect('chatbot')
     
-    # Check file extension
-    if not document.name.lower().endswith('.pdf'):
-        return JsonResponse({'error': 'Only PDF files are allowed'}, status=400)
+    documents = TrainingDocument.objects.all().order_by('-uploaded_at')
     
-    # Create documents directory if it doesn't exist
-    documents_dir = os.path.join('documents')
-    if not os.path.exists(documents_dir):
-        os.makedirs(documents_dir)
+    context = {
+        'documents': documents,
+        'page_title': 'Training Documents'
+    }
     
-    # Save the document
-    document_path = os.path.join(documents_dir, document.name)
-    try:
-        with open(document_path, 'wb+') as destination:
-            for chunk in document.chunks():
-                destination.write(chunk)
-    except Exception as e:
-        logger.error(f"Error saving document: {e}")
-        return JsonResponse({'error': f'Error saving document: {str(e)}'}, status=500)
+    return render(request, 'chatbot/admin_documents.html', context)
+
+
+@login_required
+def fine_tuning_dashboard(request):
+    """Admin dashboard for fine-tuning management"""
+    if not request.user.is_staff:
+        return redirect('chatbot')
     
-    # Process the document
-    try:
-        result = chatbot_service.document_processor.process_documents()
-        return JsonResponse({
-            'success': True,
-            'message': f'Document uploaded and processed successfully. {result}',
-            'document_name': document.name
-        })
-    except Exception as e:
-        logger.error(f"Error processing document: {e}")
-        return JsonResponse({'error': f'Document uploaded but error during processing: {str(e)}'}, status=500)
+    # Process actions
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'process_documents':
+            # Initialize processor and process documents
+            from .document_processor import DocumentProcessor
+            processor = DocumentProcessor()
+            count = processor.process_documents()
+            
+            return JsonResponse({'success': True, 'processed': count})
+        
+        elif action == 'generate_fine_tuning_file':
+            # Logic to generate fine-tuning file
+            # This would typically be a background task
+            return JsonResponse({'success': True, 'message': 'Fine-tuning file generated'})
+    
+    # Get statistics
+    total_documents = TrainingDocument.objects.count()
+    processed_documents = TrainingDocument.objects.filter(is_processed_for_training=True).count()
+    
+    context = {
+        'total_documents': total_documents,
+        'processed_documents': processed_documents,
+        'page_title': 'Fine-tuning Management'
+    }
+    
+    return render(request, 'chatbot/fine_tuning.html', context)

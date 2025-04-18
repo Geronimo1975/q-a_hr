@@ -1,108 +1,130 @@
 import os
+import re
 import PyPDF2
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
+from langchain.vectorstores import FAISS
 from django.conf import settings
-import logging
-
-logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
     def __init__(self):
-        self.documents_dir = os.path.join('documents')
+        """Initialize the document processor with necessary components"""
+        self.documents_dir = os.path.join(settings.MEDIA_ROOT, 'training_documents')
+        self.vector_store_path = os.path.join(settings.MEDIA_ROOT, 'vector_store')
+        self.embeddings = OpenAIEmbeddings(openai_api_key=settings.OPENAI_API_KEY)
         self.vector_store = None
-        self.embeddings = None
         
-        # Create documents directory if it doesn't exist
-        if not os.path.exists(self.documents_dir):
-            os.makedirs(self.documents_dir)
+        # Create directories if they don't exist
+        os.makedirs(self.documents_dir, exist_ok=True)
+        os.makedirs(self.vector_store_path, exist_ok=True)
         
-        # Initialize the embeddings using OpenAI
+        # Try to load existing vector store
         try:
-            self.embeddings = OpenAIEmbeddings(
-                openai_api_key=settings.OPENAI_API_KEY
-            )
+            if os.path.exists(os.path.join(self.vector_store_path, 'index.faiss')):
+                self.vector_store = FAISS.load_local(self.vector_store_path, self.embeddings)
         except Exception as e:
-            logger.error(f"Error initializing OpenAI embeddings: {e}")
+            print(f"Error loading vector store: {e}")
     
     def load_pdf(self, pdf_path):
         """Extract text from a PDF file"""
+        text = ""
         try:
-            text = ""
             with open(pdf_path, 'rb') as file:
                 reader = PyPDF2.PdfReader(file)
                 for page_num in range(len(reader.pages)):
-                    page = reader.pages[page_num]
-                    text += page.extract_text()
+                    text += reader.pages[page_num].extract_text()
             return text
         except Exception as e:
-            logger.error(f"Error extracting text from PDF {pdf_path}: {e}")
+            print(f"Error extracting text from PDF: {e}")
             return ""
     
     def process_documents(self):
         """Process all PDF documents in the documents directory"""
-        if not self.embeddings:
-            logger.error("OpenAI embeddings not initialized")
-            return "OpenAI embeddings not initialized"
+        all_docs = []
+        for filename in os.listdir(self.documents_dir):
+            if filename.lower().endswith('.pdf'):
+                file_path = os.path.join(self.documents_dir, filename)
+                print(f"Processing {file_path}...")
+                
+                # Extract text from PDF
+                text = self.load_pdf(file_path)
+                if text:
+                    # Split text into chunks
+                    text_splitter = RecursiveCharacterTextSplitter(
+                        chunk_size=1000,
+                        chunk_overlap=200,
+                        separators=["\n\n", "\n", ". ", " ", ""]
+                    )
+                    chunks = text_splitter.split_text(text)
+                    
+                    # Add metadata to chunks
+                    docs = [
+                        {"content": chunk, "metadata": {"source": filename}} 
+                        for chunk in chunks
+                    ]
+                    all_docs.extend(docs)
         
-        # Get all PDF files in the documents directory
-        pdf_files = [f for f in os.listdir(self.documents_dir) if f.endswith('.pdf')]
+        # Create or update the vector store
+        if all_docs:
+            if self.vector_store:
+                # Add new documents to existing store
+                self.vector_store.add_documents(all_docs)
+            else:
+                # Create new vector store
+                self.vector_store = FAISS.from_documents(all_docs, self.embeddings)
+            
+            # Save the vector store
+            self.vector_store.save_local(self.vector_store_path)
+            return len(all_docs)
         
-        if not pdf_files:
-            logger.info("No PDF documents found to process")
-            return "No PDF documents found to process"
+        return 0
+    
+    def extract_qa_pairs(self, text):
+        """Extract question-answer pairs from a FAQ document"""
+        # Simple pattern matching for Q&A format
+        qa_pattern = r'(?:Q|Question)[:\.]?\s*(.*?)\s*(?:A|Answer)[:\.]?\s*(.*?)(?=(?:Q|Question)[:\.]?|\Z)'
+        matches = re.finditer(qa_pattern, text, re.DOTALL | re.IGNORECASE)
         
-        # Process each PDF file
-        documents_text = []
-        for pdf_file in pdf_files:
-            pdf_path = os.path.join(self.documents_dir, pdf_file)
-            text = self.load_pdf(pdf_path)
-            if text:
-                documents_text.append(text)
+        qa_pairs = []
+        for match in matches:
+            question = match.group(1).strip()
+            answer = match.group(2).strip()
+            if question and answer:
+                qa_pairs.append((question, answer))
         
-        if not documents_text:
-            logger.info("No text extracted from PDF documents")
-            return "No text extracted from PDF documents"
+        return qa_pairs
+    
+    def extract_policy_statements(self, text):
+        """Extract policy statements from a policy document"""
+        # Split by sections
+        sections = re.split(r'\n\s*\n|\r\n\s*\r\n', text)
         
-        # Split documents into chunks
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-        )
+        policy_statements = []
+        current_topic = "General Policy"
         
-        chunks = []
-        for text in documents_text:
-            chunks.extend(text_splitter.split_text(text))
+        for section in sections:
+            # Check if this is a heading
+            if re.match(r'^[A-Z][\w\s]{2,50}$', section.strip()):
+                current_topic = section.strip()
+            elif len(section.strip()) > 50:  # Minimum content length
+                policy_statements.append({"topic": current_topic, "content": section.strip()})
         
-        # Create vector store from documents
-        try:
-            self.vector_store = FAISS.from_texts(chunks, self.embeddings)
-            logger.info(f"Vector store created with {len(chunks)} chunks")
-            return f"Vector store created with {len(chunks)} chunks"
-        except Exception as e:
-            logger.error(f"Error creating vector store: {e}")
-            return f"Error creating vector store: {e}"
+        return policy_statements
     
     def query_documents(self, query, k=3):
         """Query the vector store for relevant document chunks"""
         if not self.vector_store:
-            # If vector store is not initialized, try to process documents
-            try:
-                self.process_documents()
-            except Exception as e:
-                logger.error(f"Error processing documents: {e}")
-                return ["No documents available to query."]
-            
-            # If still no vector store, return empty results
-            if not self.vector_store:
-                return ["No documents available to query."]
+            return []
         
         try:
-            # Get similar document chunks from the vector store
-            docs = self.vector_store.similarity_search(query, k=k)
-            return [doc.page_content for doc in docs]
+            results = self.vector_store.similarity_search(query, k=k)
+            return [
+                {
+                    "content": doc.page_content,
+                    "source": doc.metadata.get("source", "Unknown")
+                }
+                for doc in results
+            ]
         except Exception as e:
-            logger.error(f"Error querying vector store: {e}")
-            return [f"Error querying knowledge base: {e}"]
+            print(f"Error querying documents: {e}")
+            return []

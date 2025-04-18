@@ -1,0 +1,87 @@
+{% extends 'admin/base_site.html' %}
+{% load i18n %}
+
+{% block content %}
+<div class="module">
+    <h1>{{ page_title }}</h1>
+    
+    <div class="action-buttons mb-4">
+        <a href="{% url 'admin:chatbot_trainingdocument_add' %}" class="button">Add New Document</a>
+        <a href="{% url 'chatbot:fine_tuning' %}" class="button">Fine-tuning Dashboard</a>
+    </div>
+    
+    {% if documents %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Uploaded</th>
+                    <th>Status</th>
+                    <th>Training Examples</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documents %}
+                <tr>
+                    <td>{{ doc.title }}</td>
+                    <td>{{ doc.get_document_type_display }}</td>
+                    <td>{{ doc.uploaded_at|date:"M d, Y" }}</td>
+                    <td>
+                        {% if doc.is_processed_for_training %}
+                        <span class="success">Processed</span>
+                        {% else %}
+                        <span class="pending">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ doc.training_examples.count }}</td>
+                    <td>
+                        <a href="{% url 'admin:chatbot_trainingdocument_change' doc.id %}" class="button">Edit</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No documents have been uploaded yet.</p>
+    {% endif %}
+</div>
+
+<style>
+    .success {
+        color: green;
+        font-weight: bold;
+    }
+    .pending {
+        color: orange;
+        font-weight: bold;
+    }
+    .action-buttons {
+        margin-bottom: 20px;
+    }
+    .button {
+        padding: 8px 15px;
+        margin-right: 10px;
+        background-color: #417690;
+        color: white;
+        border-radius: 4px;
+        text-decoration: none;
+    }
+    .button:hover {
+        background-color: #205067;
+    }
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .table th, .table td {
+        padding: 8px 12px;
+        border-bottom: 1px solid #ddd;
+        text-align: left;
+    }
+    .table th {
+        background-color: #f5f5f5;
+    }
+</style>
+{% endblock %}
