@@ -18,3 +18,23 @@ def track_source(request, tracking_code=None):
     
     # Redirect to the homepage or registration page
     return redirect('home')
+
+
+def impressum_view(request):
+    """German legal Impressum page required by law."""
+    return render(request, 'legal/impressum.html')
+
+
+def privacy_policy_view(request):
+    """Privacy policy page required by GDPR."""
+    return render(request, 'legal/privacy_policy.html')
+
+
+def terms_view(request):
+    """Terms and conditions page."""
+    return render(request, 'legal/terms.html')
+
+
+def cookie_policy_view(request):
+    """Cookie policy page required by GDPR."""
+    return render(request, 'legal/cookie_policy.html')

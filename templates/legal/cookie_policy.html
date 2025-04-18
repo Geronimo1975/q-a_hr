@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block title %} - Cookie-Richtlinie{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4 p-md-5">
+                    <h1 class="mb-4">Cookie-Richtlinie</h1>
+                    
+                    <h2 class="h4 mt-4">Was sind Cookies?</h2>
+                    <p>
+                        Cookies sind kleine Textdateien, die über Ihren Webbrowser auf Ihrem Computer, Tablet oder Smartphone 
+                        gespeichert werden, wenn Sie eine Website besuchen. Cookies ermöglichen es der Website, Ihre Aktionen 
+                        und Vorlieben (wie Login, Sprache, Schriftgröße und andere Anzeigeeinstellungen) für einen bestimmten 
+                        Zeitraum zu speichern.
+                    </p>
+                    
+                    <h2 class="h4 mt-4">Wie verwenden wir Cookies?</h2>
+                    <p>
+                        Wir verwenden Cookies für verschiedene Zwecke:
+                    </p>
+                    <ul>
+                        <li><strong>Erforderliche Cookies:</strong> Diese Cookies sind für das Funktionieren unserer Website 
+                            unerlässlich und können in unseren Systemen nicht ausgeschaltet werden. Sie werden in der Regel nur 
+                            als Reaktion auf von Ihnen durchgeführte Aktionen gesetzt, die einer Anforderung von Diensten 
+                            gleichkommen, wie z.B. das Festlegen Ihrer Datenschutzeinstellungen, das Anmelden oder das Ausfüllen 
+                            von Formularen. Sie können Ihren Browser so einstellen, dass er diese Cookies blockiert oder Sie 
+                            darüber benachrichtigt, aber einige Teile der Website werden dann nicht funktionieren.</li>
+                        <li><strong>Session-Cookies:</strong> Diese Cookies speichern Informationen, die für die Nutzung der 
+                            Website während Ihrer aktuellen Browsersitzung erforderlich sind, z.B. für die Speicherung Ihrer 
+                            Anmeldedaten oder den Status des Bewerbungsformulars.</li>
+                        <li><strong>Funktionale Cookies:</strong> Diese Cookies ermöglichen es uns, Ihnen eine verbesserte 
+                            Funktionalität und Personalisierung zu bieten. Sie können von uns oder von Drittanbietern gesetzt 
+                            werden, deren Dienste wir auf unseren Seiten eingebunden haben.</li>
+                    </ul>
+                    
+                    <h2 class="h4 mt-4">Wie können Sie Cookies kontrollieren?</h2>
+                    <p>
+                        Sie können bestimmen, ob und wie ein Cookie auf Ihrem Computer gespeichert wird, indem Sie die 
+                        Einstellungen in Ihrem Browser anpassen. Sie können Cookies zum Beispiel vollständig ablehnen oder nur 
+                        bestimmte Arten von Cookies akzeptieren.
+                    </p>
+                    <p>
+                        Wenn Sie Cookies ablehnen, können wir nicht garantieren, dass unsere Website in vollem Umfang 
+                        funktioniert. Einige Funktionen der Website können beeinträchtigt sein, wenn Sie keine Cookies akzeptieren.
+                    </p>
+                    
+                    <h2 class="h4 mt-4">Weitere Informationen</h2>
+                    <p>
+                        Ausführlichere Informationen über unseren Umgang mit personenbezogenen Daten finden Sie in unserer 
+                        <a href="{% url 'privacy_policy' %}">Datenschutzerklärung</a>.
+                    </p>
+                    <p>
+                        Wenn Sie Fragen zu unseren Cookies haben, kontaktieren Sie uns bitte unter 
+                        fastdelivery@gti-europe.de.
+                    </p>
+                    
+                    <p class="mt-4">
+                        Stand: 18. April 2025
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
