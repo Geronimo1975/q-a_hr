@@ -24,4 +24,5 @@ dependencies = [
     "channels-redis>=4.2.1",
     "langchain-community>=0.3.21",
     "fpdf>=1.7.2",
+    "google-cloud-translate>=3.20.2",
 ]
