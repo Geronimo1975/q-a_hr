@@ -18,6 +18,7 @@ CSRF_TRUSTED_ORIGINS = [
     'https://*.replit.app',
     'http://localhost:5000',
     'http://0.0.0.0:5000',
+    'https://delivery-driver-portal.georgecucuiet.repl.co',
 ]
 
 # Application definition
@@ -52,6 +53,7 @@ MIDDLEWARE = [
     'django.middleware.locale.LocaleMiddleware',  # Add locale middleware for language detection
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
+    'utils.csrf_middleware.CustomCsrfMiddleware',  # Custom CSRF debugging middleware
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -209,3 +211,10 @@ GOOGLE_TRANSLATE_API_KEY = os.environ.get('GOOGLE_TRANSLATE_API_KEY', '')
 # Translation settings
 TRANSLATIONS_FALLBACK_TO_GOOGLE = True  # Whether to use Google Translate for missing translations
 TRANSLATION_DEBUG = True  # Whether to log translation requests and responses
+
+# CSRF Settings
+CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+CSRF_COOKIE_HTTPONLY = False  # JavaScript needs access to CSRF token
+CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'
+CSRF_USE_SESSIONS = False  # Store CSRF token in cookie, not session
+CSRF_COOKIE_SAMESITE = None  # Allow cross-site requests with credentials
