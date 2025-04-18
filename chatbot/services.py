@@ -135,10 +135,14 @@ class ChatbotService:
         
         print(f"Found {history.count()} messages in conversation history")
         
+        # Convert to list to use negative indexing
+        history_list = list(history)
+        
         # Skip the most recent user message (we'll add it separately)
-        for i, msg in enumerate(history[:-1]):
-            print(f"Adding message {i+1} from history: {msg.role} - '{msg.content[:30]}...'")
-            messages.append({"role": msg.role, "content": msg.content})
+        if len(history_list) > 1:
+            for i, msg in enumerate(history_list[:-1]):
+                print(f"Adding message {i+1} from history: {msg.role} - '{msg.content[:30]}...'")
+                messages.append({"role": msg.role, "content": msg.content})
         
         # Add the current user message
         print(f"Adding current user message: '{message_text}'")
