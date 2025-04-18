@@ -12,7 +12,11 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-key')
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = ['*']
-CSRF_TRUSTED_ORIGINS = [f'https://{os.environ.get("REPL_SLUG", "")}.{os.environ.get("REPL_OWNER", "")}.repl.co']
+CSRF_TRUSTED_ORIGINS = [
+    f'https://{os.environ.get("REPL_SLUG", "")}.{os.environ.get("REPL_OWNER", "")}.repl.co',
+    'https://5a681bca-0236-4a84-a6cc-51b738f95f48-00-go1lmhtu1a5w.picard.replit.dev',
+    'https://*.picard.replit.dev',
+]
 
 # Application definition
 INSTALLED_APPS = [
