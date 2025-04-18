@@ -202,7 +202,11 @@ class QuestionAdmin(admin.ModelAdmin):
         return JsonResponse(result)
     
     def sync_to_google_sheets(self, request, queryset):
-        """Admin action to sync selected questions to Google Sheets"""
+        """Admin action to sync all questions to Google Sheets
+        
+        Note: This syncs ALL questions, not just the selected ones,
+        since the ordering needs to be consistent across all stages.
+        """
         from utils.google_sheets import sync_questions_to_sheets
         
         result = sync_questions_to_sheets()
@@ -210,7 +214,7 @@ class QuestionAdmin(admin.ModelAdmin):
             self.message_user(request, f"Successfully synced {result['count']} questions to Google Sheets", messages.SUCCESS)
         else:
             self.message_user(request, f"Error syncing questions: {result['error']}", messages.ERROR)
-    sync_to_google_sheets.short_description = "Sync selected questions to Google Sheets"
+    sync_to_google_sheets.short_description = "Sync all questions to Google Sheets (ignores selection)"
     
     def reorder_link(self, obj):
         """Link to the reorder page"""

@@ -246,9 +246,14 @@ def create_sheet_if_needed(sheet_id):
 def sync_questions_to_sheets():
     """Sync all questions to Google Sheets with proper numbering and ordering"""
     try:
+        # Get Google Sheets API key
+        api_key = os.environ.get('GOOGLE_SHEETS_API_KEY')
+        if not api_key:
+            return {"success": False, "error": "Google Sheets API key is not set in environment variables"}
+        
         sheets = get_service()
         if not sheets:
-            return {"success": False, "error": "Could not initialize Google Sheets service"}
+            return {"success": False, "error": "Could not initialize Google Sheets service. Check API key and credentials."}
         
         sheet_id = os.environ.get('GOOGLE_SHEETS_ID')
         if not sheet_id:
