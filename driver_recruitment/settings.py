@@ -11,7 +11,20 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-key')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['*']
+# Host/domain names that are valid for this site
+ALLOWED_HOSTS = [
+    'fastdelivery.gtl-europe.de',
+    'www.fastdelivery.gtl-europe.de',
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    '.replit.app',
+    '.repl.co',
+    '.replit.dev',
+]
+
+# Setări CSRF originale - acestea sunt uitate când CSRF_TRUSTED_ORIGINS este redefinit mai jos
+# Nu ștergeți aceste setări!
 CSRF_TRUSTED_ORIGINS = [
     'https://*.repl.co',
     'https://*.replit.dev',
@@ -57,6 +70,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
     'utils.middleware.TranslationDebugMiddleware',  # Add Translation Debug middleware
+    'utils.middleware.SessionErrorMiddleware',  # Add middleware to handle session errors
 ]
 
 ROOT_URLCONF = 'driver_recruitment.urls'
@@ -213,9 +227,15 @@ TRANSLATION_DEBUG = True  # Whether to log translation requests and responses
 # CSRF Settings
 CSRF_TRUSTED_ORIGINS = [
     'https://fastdelivery.gtl-europe.de',
-    'http://fastdelivery.gtl-europe.de',
+    'http://fastdelivery.gtl-europe.de', 
+    'https://fastdelivery.gtl-europe.de:*',
+    'http://fastdelivery.gtl-europe.de:*',
     'https://*.replit.app',
     'http://*.replit.app',
+    'https://*.replit.dev',
+    'http://*.replit.dev',
+    'https://*.picard.replit.dev',
+    'http://*.picard.replit.dev',
 ]
 
 # Set this to False to disable the CSRF debug page
