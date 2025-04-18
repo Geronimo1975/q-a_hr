@@ -4,19 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Delivery Driver Recruitment{% block title %}{% endblock %}</title>
+    <!-- Google Fonts - Nunito -->
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
     <!-- Bootstrap 5 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- AOS Animations -->
+    <link href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/custom.css">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
         <div class="container">
             <a class="navbar-brand" href="{% url 'home' %}">
-                <i class="fas fa-truck"></i> Driver Recruitment
+                <i class="bi bi-truck"></i> Driver Recruitment
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -41,7 +48,7 @@
                             <a class="nav-link" href="{% url 'account_login' %}">Login</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'account_signup' %}">Register</a>
+                            <a class="nav-link btn btn-outline-light btn-sm ms-2 px-3" href="{% url 'account_signup' %}">Register</a>
                         </li>
                     {% endif %}
                 </ul>
@@ -49,47 +56,74 @@
         </div>
     </nav>
 
-    <div class="container mt-4">
-        {% if messages %}
+    {% if messages %}
+        <div class="container mt-3">
             <div class="messages">
                 {% for message in messages %}
-                    <div class="alert alert-{{ message.tags }}">
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
                         {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
                 {% endfor %}
             </div>
-        {% endif %}
+        </div>
+    {% endif %}
 
-        {% block content %}{% endblock %}
-    </div>
+    {% block content %}{% endblock %}
 
-    <footer class="bg-light text-center text-lg-start mt-5">
+    <footer class="text-center text-lg-start mt-5">
         <div class="container p-4">
             <div class="row">
-                <div class="col-lg-6 col-md-12 mb-4 mb-md-0">
-                    <h5 class="text-uppercase">Driver Recruitment</h5>
+                <div class="col-lg-4 col-md-12 mb-4 mb-md-0" data-aos="fade-up">
+                    <h5 class="text-uppercase fw-bold mb-3">Driver Recruitment</h5>
                     <p>
                         Join our team of professional delivery drivers. Complete the application process to start your journey with us.
                     </p>
+                    <div class="mt-4">
+                        <a href="#" class="me-3 text-reset"><i class="bi bi-facebook fs-4"></i></a>
+                        <a href="#" class="me-3 text-reset"><i class="bi bi-twitter fs-4"></i></a>
+                        <a href="#" class="me-3 text-reset"><i class="bi bi-instagram fs-4"></i></a>
+                        <a href="#" class="me-3 text-reset"><i class="bi bi-linkedin fs-4"></i></a>
+                    </div>
                 </div>
-                <div class="col-lg-6 col-md-12 mb-4 mb-md-0">
-                    <h5 class="text-uppercase">Contact</h5>
-                    <p>
-                        <i class="fas fa-envelope me-3"></i> info@driverrecruitment.com<br>
-                        <i class="fas fa-phone me-3"></i> +123 456 7890
-                    </p>
+                <div class="col-lg-4 col-md-6 mb-4 mb-md-0" data-aos="fade-up" data-aos-delay="100">
+                    <h5 class="text-uppercase fw-bold mb-3">Quick Links</h5>
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2"><a href="{% url 'home' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> Home</a></li>
+                        <li class="mb-2"><a href="{% url 'account_signup' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> Apply Now</a></li>
+                        <li class="mb-2"><a href="{% url 'account_login' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> Login</a></li>
+                        <li class="mb-2"><a href="#" class="text-reset"><i class="bi bi-chevron-right me-1"></i> FAQ</a></li>
+                    </ul>
+                </div>
+                <div class="col-lg-4 col-md-6 mb-4 mb-md-0" data-aos="fade-up" data-aos-delay="200">
+                    <h5 class="text-uppercase fw-bold mb-3">Contact</h5>
+                    <p class="mb-1"><i class="bi bi-geo-alt-fill me-2"></i> 123 Delivery Street, City</p>
+                    <p class="mb-1"><i class="bi bi-envelope-fill me-2"></i> info@driverrecruitment.com</p>
+                    <p class="mb-1"><i class="bi bi-telephone-fill me-2"></i> +123 456 7890</p>
+                    <p class="mb-1"><i class="bi bi-clock-fill me-2"></i> Mon-Fri: 9:00 AM - 5:00 PM</p>
                 </div>
             </div>
         </div>
-        <div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.05);">
-            © 2023 Driver Recruitment | 
-            <a class="text-dark" href="#">Privacy Policy</a> | 
-            <a class="text-dark" href="#">Terms of Service</a>
+        <div class="text-center p-3">
+            © 2025 Driver Recruitment | 
+            <a class="text-reset" href="#">Privacy Policy</a> | 
+            <a class="text-reset" href="#">Terms of Service</a>
         </div>
     </footer>
 
     <!-- Bootstrap 5 JS Bundle -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- AOS Animation Library -->
+    <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
+    <script>
+        // Initialize AOS animations
+        AOS.init({
+            duration: 800,
+            easing: 'ease-in-out',
+            once: true,
+            offset: 100
+        });
+    </script>
     <!-- Custom JavaScript -->
     <script src="/static/js/main.js"></script>
     {% block extra_js %}{% endblock %}

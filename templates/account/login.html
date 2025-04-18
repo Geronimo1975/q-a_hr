@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% load account socialaccount %}
+{% load crispy_forms_tags %}
+
+{% block title %} - Log In{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <div class="card shadow-lg" data-aos="fade-up">
+        <div class="card-header bg-primary text-white py-3">
+          <h3 class="card-title mb-0 text-center">{% trans "Log In" %}</h3>
+        </div>
+        <div class="card-body p-4">
+          <p class="text-center mb-4">{% blocktrans %}If you have not created an account yet, then please
+            <a href="{{ signup_url }}" class="text-primary">register</a> first.{% endblocktrans %}</p>
+
+          <form class="login" method="POST" action="{% url 'account_login' %}">
+            {% csrf_token %}
+            {{ form|crispy }}
+            {% if redirect_field_value %}
+            <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+            {% endif %}
+            
+            <div class="d-grid gap-2 mt-4">
+              <button class="btn btn-primary btn-lg" type="submit">{% trans "Sign In" %}</button>
+            </div>
+            
+            <div class="text-center mt-3">
+              <a class="button secondaryAction" href="{% url 'account_reset_password' %}">{% trans "Forgot Password?" %}</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
