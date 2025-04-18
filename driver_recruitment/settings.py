@@ -34,11 +34,13 @@ INSTALLED_APPS = [
     'allauth.socialaccount',
     'crispy_forms',
     'crispy_bootstrap5',
+    'channels',
     
     # Local apps
     'accounts',
     'recruitment',
     'core',
+    'chatbot',
 ]
 
 MIDDLEWARE = [
@@ -71,6 +73,14 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'driver_recruitment.wsgi.application'
+ASGI_APPLICATION = 'driver_recruitment.asgi.application'
+
+# Channels configuration
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',  # For development
+    }
+}
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases

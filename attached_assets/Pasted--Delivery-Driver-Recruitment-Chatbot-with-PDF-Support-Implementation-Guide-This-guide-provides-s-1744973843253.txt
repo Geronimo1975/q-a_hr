@@ -1,0 +1,845 @@
+# Delivery Driver Recruitment Chatbot with PDF Support - Implementation Guide
+
+This guide provides step-by-step instructions to implement an OpenAI-powered chatbot with PDF document support for your DeliveryDriverPortal, along with automated testing to verify data is correctly logged to Google Sheets.
+
+## Project Overview
+
+You'll implement a comprehensive chatbot solution with the following capabilities:
+1. OpenAI integration for natural conversation
+2. PDF document processing for answering questions from documents
+3. Google Sheets integration for tracking applicant data
+4. Automated testing framework to verify correct data flow
+
+## Implementation Steps
+
+### 1. Set Up Required Dependencies
+
+Add these packages to your `pyproject.toml` file or install via terminal:
+
+```bash
+pip install openai django-channels channels-redis PyPDF2 langchain google-api-python-client google-auth-httplib2 google-auth-oauthlib
+```
+
+### 2. Configure Environment Variables in Replit
+
+Add these secrets to your Replit environment:
+
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `GOOGLE_SHEETS_ID`: Your Google Sheet ID (1SwVg13wGY8-yBxv3uzTiaeJ0pAhEPEgRBp_wRdOwluk)
+- `GOOGLE_APPLICATION_CREDENTIALS`: JSON credentials for Google API (will be saved as credentials.json)
+
+### 3. Create the Chatbot Application Structure
+
+Run this command to create a new Django app:
+
+```bash
+python manage.py startapp chatbot
+```
+
+### 4. Implement PDF Document Processing
+
+Create `chatbot/document_processor.py`:
+
+```python
+import os
+import PyPDF2
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import FAISS
+from django.conf import settings
+
+class DocumentProcessor:
+    def __init__(self):
+        self.embeddings = OpenAIEmbeddings(openai_api_key=settings.OPENAI_API_KEY)
+        self.docs_dir = os.path.join(settings.BASE_DIR, 'documents')
+        self.vector_store = None
+        
+    def load_pdf(self, pdf_path):
+        """Extract text from a PDF file"""
+        with open(pdf_path, 'rb') as file:
+            reader = PyPDF2.PdfReader(file)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text()
+            return text
+            
+    def process_documents(self):
+        """Process all PDF documents in the documents directory"""
+        if not os.path.exists(self.docs_dir):
+            os.makedirs(self.docs_dir)
+            
+        documents = []
+        for filename in os.listdir(self.docs_dir):
+            if filename.endswith('.pdf'):
+                file_path = os.path.join(self.docs_dir, filename)
+                text = self.load_pdf(file_path)
+                documents.append(text)
+                
+        if not documents:
+            return False
+            
+        # Split documents into chunks
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200
+        )
+        
+        chunks = []
+        for doc in documents:
+            chunks.extend(text_splitter.split_text(doc))
+            
+        # Create vector store
+        self.vector_store = FAISS.from_texts(chunks, self.embeddings)
+        return True
+        
+    def query_documents(self, query, k=3):
+        """Query the vector store for relevant document chunks"""
+        if not self.vector_store:
+            if not self.process_documents():
+                return ["No documents available to query."]
+                
+        results = self.vector_store.similarity_search(query, k=k)
+        return [doc.page_content for doc in results]
+```
+
+### 5. Implement Google Sheets Integration
+
+Create `utils/google_sheets.py`:
+
+```python
+import os
+import json
+from datetime import datetime
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from django.conf import settings
+
+def get_service():
+    """Get the Google Sheets service"""
+    creds_json = settings.GOOGLE_APPLICATION_CREDENTIALS
+    
+    # Save credentials from environment variable to a file
+    creds_path = os.path.join(settings.BASE_DIR, 'credentials.json')
+    with open(creds_path, 'w') as f:
+        f.write(creds_json)
+    
+    creds = Credentials.from_service_account_file(
+        creds_path, 
+        scopes=['https://www.googleapis.com/auth/spreadsheets']
+    )
+    
+    service = build('sheets', 'v4', credentials=creds)
+    return service.spreadsheets()
+
+def append_application_data(data):
+    """
+    Append driver application data to Google Sheet
+    
+    Args:
+        data: Dictionary containing application data
+    
+    Returns:
+        Boolean indicating success
+    """
+    try:
+        sheets = get_service()
+        
+        # Format data as expected by the sheet
+        row_data = [
+            data.get('timestamp', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
+            data.get('name', ''),
+            data.get('email', ''),
+            data.get('phone', ''),
+            data.get('vehicle_type', ''),
+            data.get('experience', ''),
+            data.get('availability', ''),
+            data.get('referred_by', ''),
+            data.get('stage', 'Application Submitted'),
+            data.get('chat_session_id', '')
+        ]
+        
+        sheet_id = settings.GOOGLE_SHEETS_ID
+        result = sheets.values().append(
+            spreadsheetId=sheet_id,
+            range='Sheet1!A:J',  # Adjust based on your sheet structure
+            valueInputOption='USER_ENTERED',
+            insertDataOption='INSERT_ROWS',
+            body={'values': [row_data]}
+        ).execute()
+        
+        return True
+    except HttpError as error:
+        print(f"An error occurred: {error}")
+        return False
+```
+
+### 6. Implement Chatbot Models
+
+Create `chatbot/models.py`:
+
+```python
+from django.db import models
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+class ChatSession(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    session_id = models.CharField(max_length=100, unique=True)
+    google_sheet_updated = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Store applicant data if collected during chat
+    applicant_name = models.CharField(max_length=255, blank=True, null=True)
+    applicant_email = models.EmailField(blank=True, null=True)
+    applicant_phone = models.CharField(max_length=20, blank=True, null=True)
+    vehicle_type = models.CharField(max_length=50, blank=True, null=True)
+    driving_experience = models.CharField(max_length=100, blank=True, null=True)
+    availability = models.CharField(max_length=255, blank=True, null=True)
+    
+    def __str__(self):
+        return f"Chat Session: {self.session_id}"
+    
+    def update_google_sheet(self):
+        """Update Google Sheet with applicant data"""
+        from utils.google_sheets import append_application_data
+        
+        if self.google_sheet_updated or not self.applicant_email:
+            return False
+            
+        data = {
+            'timestamp': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'name': self.applicant_name,
+            'email': self.applicant_email,
+            'phone': self.applicant_phone,
+            'vehicle_type': self.vehicle_type,
+            'experience': self.driving_experience,
+            'availability': self.availability,
+            'chat_session_id': self.session_id
+        }
+        
+        success = append_application_data(data)
+        if success:
+            self.google_sheet_updated = True
+            self.save()
+        return success
+
+class ChatMessage(models.Model):
+    ROLE_CHOICES = (
+        ('user', 'User'),
+        ('assistant', 'Assistant'),
+        ('system', 'System'),
+    )
+    
+    session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='messages')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    content = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.role}: {self.content[:30]}..."
+    
+    class Meta:
+        ordering = ['timestamp']
+```
+
+### 7. Implement Chatbot Service
+
+Create `chatbot/services.py`:
+
+```python
+import openai
+import uuid
+import re
+from django.conf import settings
+from .models import ChatSession, ChatMessage
+from .document_processor import DocumentProcessor
+
+# Configure OpenAI
+openai.api_key = settings.OPENAI_API_KEY
+
+class ChatbotService:
+    def __init__(self):
+        self.document_processor = DocumentProcessor()
+        # Pre-process documents if any
+        self.document_processor.process_documents()
+        
+    def get_or_create_session(self, user=None):
+        """Get existing session for user or create a new one"""
+        if user and user.is_authenticated:
+            # Try to find an existing session for this user
+            session = ChatSession.objects.filter(user=user).order_by('-updated_at').first()
+            if session:
+                return session
+        
+        # Create a new session
+        session_id = str(uuid.uuid4())
+        session = ChatSession.objects.create(
+            user=user if user and user.is_authenticated else None,
+            session_id=session_id
+        )
+        
+        # Add system message with context about the delivery driver recruitment
+        system_message = (
+            "You are a helpful assistant for a delivery driver recruitment platform. "
+            "You can help answer questions about the application process, requirements, "
+            "compensation, scheduling, and other related topics. Be friendly, professional, "
+            "and encouraging. Your goal is to help potential drivers understand the benefits "
+            "of joining our delivery team and guide them through the application process.\n\n"
+            "IMPORTANT: If the user expresses interest in applying or provides personal information, "
+            "extract and save their details. Ask for their name, email, phone number, "
+            "vehicle type, driving experience, and availability if they don't provide this information."
+        )
+        
+        ChatMessage.objects.create(
+            session=session,
+            role='system',
+            content=system_message
+        )
+        
+        return session
+    
+    def get_chat_history(self, session, limit=10):
+        """Retrieve the chat history for a session"""
+        return ChatMessage.objects.filter(session=session).order_by('timestamp')[:limit]
+    
+    def extract_applicant_info(self, session, message_text):
+        """Extract applicant information from messages if provided"""
+        
+        # Check for email
+        email_match = re.search(r'[\w.+-]+@[\w-]+\.[\w.-]+', message_text)
+        if email_match and not session.applicant_email:
+            session.applicant_email = email_match.group(0)
+        
+        # Check for phone number (simple pattern)
+        phone_match = re.search(r'(\+\d{1,3}[-.\s]?)?(\d{3}[-.\s]?\d{3}[-.\s]?\d{4}|\d{10})', message_text)
+        if phone_match and not session.applicant_phone:
+            session.applicant_phone = phone_match.group(0)
+        
+        # Look for name patterns (this is simplistic and might need improvement)
+        name_patterns = [
+            r"my name is ([A-Za-z\s]+)",
+            r"I am ([A-Za-z\s]+)",
+            r"I'm ([A-Za-z\s]+)",
+            r"([A-Za-z\s]+) here"
+        ]
+        
+        if not session.applicant_name:
+            for pattern in name_patterns:
+                name_match = re.search(pattern, message_text, re.IGNORECASE)
+                if name_match:
+                    potential_name = name_match.group(1).strip()
+                    # Filter out common phrases that aren't names
+                    non_names = ["interested", "applying", "looking", "available"]
+                    if len(potential_name.split()) <= 3 and not any(word in potential_name.lower() for word in non_names):
+                        session.applicant_name = potential_name
+                        break
+        
+        # Check for vehicle information
+        vehicle_types = ["car", "bike", "motorcycle", "scooter", "bicycle", "van", "truck"]
+        if not session.vehicle_type:
+            for vehicle in vehicle_types:
+                if vehicle in message_text.lower():
+                    session.vehicle_type = vehicle
+                    break
+        
+        # Check for experience mentions
+        experience_patterns = [
+            r"(\d+)\s*years?\s*experience",
+            r"(\d+)\s*years?\s*of\s*experience",
+            r"experience\s*of\s*(\d+)\s*years?",
+            r"been driving for\s*(\d+)\s*years?"
+        ]
+        
+        if not session.driving_experience:
+            for pattern in experience_patterns:
+                exp_match = re.search(pattern, message_text, re.IGNORECASE)
+                if exp_match:
+                    session.driving_experience = f"{exp_match.group(1)} years"
+                    break
+        
+        # Check for availability
+        availability_patterns = [
+            r"available\s*(.*?)(?:\.|\n|$)",
+            r"work\s*(full[ -]time|part[ -]time)",
+            r"can work\s*(.*?)(?:\.|\n|$)",
+            r"my availability is\s*(.*?)(?:\.|\n|$)"
+        ]
+        
+        if not session.availability:
+            for pattern in availability_patterns:
+                avail_match = re.search(pattern, message_text, re.IGNORECASE)
+                if avail_match:
+                    session.availability = avail_match.group(1).strip()
+                    break
+        
+        # Save any extracted information
+        if session.is_dirty():
+            session.save()
+            
+            # If we have email, attempt to update Google Sheet
+            if session.applicant_email and not session.google_sheet_updated:
+                session.update_google_sheet()
+    
+    def send_message(self, session, message_text):
+        """
+        Send a user message and get the AI response
+        """
+        # Extract applicant information if any
+        self.extract_applicant_info(session, message_text)
+        
+        # Save user message
+        user_message = ChatMessage.objects.create(
+            session=session,
+            role='user',
+            content=message_text
+        )
+        
+        # Query documents for relevant information
+        doc_results = self.document_processor.query_documents(message_text)
+        
+        # Get all messages for this session to maintain context
+        messages = []
+        for msg in ChatMessage.objects.filter(session=session).order_by('timestamp'):
+            messages.append({
+                'role': msg.role,
+                'content': msg.content
+            })
+        
+        # If we have document results, add them to the context
+        if doc_results and any(len(result) > 0 for result in doc_results):
+            docs_context = "Information from our documents:\n\n" + "\n\n".join(doc_results)
+            messages.append({
+                'role': 'system',
+                'content': f"The following information from our documents might help answer the user's question. Use this information if relevant, but respond in a natural conversational way without mentioning these document snippets directly:\n\n{docs_context}"
+            })
+        
+        try:
+            # Call OpenAI API
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",  # Use GPT-4 for better results if available
+                messages=messages,
+                max_tokens=800,
+                temperature=0.7,
+            )
+            
+            # Extract the assistant's response
+            assistant_message_content = response.choices[0].message.content
+            
+            # Save assistant response
+            assistant_message = ChatMessage.objects.create(
+                session=session,
+                role='assistant',
+                content=assistant_message_content
+            )
+            
+            # Check if assistant is asking for missing applicant information
+            self.extract_applicant_info(session, assistant_message_content)
+            
+            return {
+                'user_message': user_message,
+                'assistant_message': assistant_message,
+                'success': True
+            }
+        except Exception as e:
+            # Handle errors
+            error_message = f"Sorry, I'm having trouble responding right now. Error: {str(e)}"
+            assistant_message = ChatMessage.objects.create(
+                session=session,
+                role='assistant',
+                content=error_message
+            )
+            
+            return {
+                'user_message': user_message,
+                'assistant_message': assistant_message,
+                'success': False,
+                'error': str(e)
+            }
+```
+
+### 8. Implement Views and URLs
+
+Create `chatbot/views.py`:
+
+```python
+from django.shortcuts import render
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
+import json
+
+from .services import ChatbotService
+from .models import ChatSession
+
+# Initialize chatbot service
+chatbot_service = ChatbotService()
+
+def chatbot_view(request):
+    """Render the chatbot interface"""
+    # Get or create a chat session for this user
+    if request.user.is_authenticated:
+        session = chatbot_service.get_or_create_session(request.user)
+    else:
+        # For anonymous users, try to get session from cookies
+        session_id = request.COOKIES.get('chat_session_id')
+        if session_id:
+            try:
+                session = ChatSession.objects.get(session_id=session_id)
+            except ChatSession.DoesNotExist:
+                session = chatbot_service.get_or_create_session()
+        else:
+            session = chatbot_service.get_or_create_session()
+    
+    # Get chat history
+    messages = chatbot_service.get_chat_history(session, limit=50)
+    
+    context = {
+        'chat_session': session,
+        'messages': messages,
+    }
+    
+    response = render(request, 'chatbot/chat.html', context)
+    
+    # Set cookie for anonymous users
+    if not request.user.is_authenticated:
+        response.set_cookie('chat_session_id', session.session_id, max_age=3600*24*7)  # 7 days
+    
+    return response
+
+@require_POST
+@csrf_exempt  # In production, handle CSRF properly
+def send_message_api(request):
+    """API endpoint to send a message to the chatbot"""
+    try:
+        data = json.loads(request.body)
+        message = data.get('message', '').strip()
+        
+        if not message:
+            return JsonResponse({'error': 'Message cannot be empty'}, status=400)
+        
+        # Get the session
+        if request.user.is_authenticated:
+            session = chatbot_service.get_or_create_session(request.user)
+        else:
+            session_id = request.COOKIES.get('chat_session_id')
+            try:
+                session = ChatSession.objects.get(session_id=session_id)
+            except (ChatSession.DoesNotExist, TypeError):
+                return JsonResponse({'error': 'Invalid session'}, status=400)
+        
+        # Process the message
+        result = chatbot_service.send_message(session, message)
+        
+        if result['success']:
+            return JsonResponse({
+                'user_message': {
+                    'content': result['user_message'].content,
+                    'timestamp': result['user_message'].timestamp.isoformat(),
+                },
+                'assistant_message': {
+                    'content': result['assistant_message'].content,
+                    'timestamp': result['assistant_message'].timestamp.isoformat(),
+                },
+                'sheet_updated': session.google_sheet_updated
+            })
+        else:
+            return JsonResponse({
+                'error': 'Failed to get response',
+                'message': result['assistant_message'].content
+            }, status=500)
+            
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+def dashboard_view(request):
+    """Admin dashboard to view chatbot interactions and Google Sheet status"""
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+        
+    # Get all chat sessions
+    sessions = ChatSession.objects.all().order_by('-created_at')
+    
+    context = {
+        'sessions': sessions,
+    }
+    
+    return render(request, 'chatbot/dashboard.html', context)
+```
+
+Create `chatbot/urls.py`:
+
+```python
+from django.urls import path
+from . import views
+
+app_name = 'chatbot'
+
+urlpatterns = [
+    path('', views.chatbot_view, name='chat'),
+    path('api/send-message/', views.send_message_api, name='send_message_api'),
+    path('dashboard/', views.dashboard_view, name='dashboard'),
+]
+```
+
+Update your main `urls.py`:
+
+```python
+from django.urls import path, include
+
+urlpatterns = [
+    # Existing URLs
+    path('chat/', include('chatbot.urls', namespace='chatbot')),
+]
+```
+
+### 9. Implement HTML Templates
+
+Create `templates/chatbot/chat.html` for the chat interface.
+
+Create `templates/chatbot/dashboard.html` for the admin dashboard.
+
+### 10. Configure Settings
+
+Update `settings.py`:
+
+```python
+import os
+import json
+
+# Installed Apps
+INSTALLED_APPS = [
+    # ... existing apps
+    'chatbot',
+]
+
+# OpenAI API Key
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+
+# Google Sheets Config
+GOOGLE_SHEETS_ID = os.environ.get('GOOGLE_SHEETS_ID')
+GOOGLE_APPLICATION_CREDENTIALS = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+```
+
+### 11. Create Automated Tests
+
+Create `chatbot/tests.py`:
+
+```python
+from django.test import TestCase, Client
+from django.urls import reverse
+import json
+import uuid
+from unittest.mock import patch, MagicMock
+
+from .models import ChatSession, ChatMessage
+from .services import ChatbotService
+
+class ChatbotTestCase(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.chatbot_service = ChatbotService()
+        
+    @patch('utils.google_sheets.append_application_data')
+    def test_google_sheet_integration(self, mock_append):
+        """Test that applicant data is correctly sent to Google Sheets"""
+        # Configure mock
+        mock_append.return_value = True
+        
+        # Create a test session
+        session_id = str(uuid.uuid4())
+        session = ChatSession.objects.create(
+            session_id=session_id,
+            applicant_name="Test User",
+            applicant_email="test@example.com",
+            applicant_phone="+1234567890",
+            vehicle_type="car",
+            driving_experience="3 years",
+            availability="full-time"
+        )
+        
+        # Update Google Sheet
+        result = session.update_google_sheet()
+        
+        # Check that Google Sheet was updated
+        self.assertTrue(result)
+        self.assertTrue(session.google_sheet_updated)
+        
+        # Verify the call to Google Sheets
+        mock_append.assert_called_once()
+        call_args = mock_append.call_args[0][0]
+        self.assertEqual(call_args['name'], "Test User")
+        self.assertEqual(call_args['email'], "test@example.com")
+        
+    @patch('openai.ChatCompletion.create')
+    def test_chatbot_information_extraction(self, mock_openai):
+        """Test that chatbot correctly extracts applicant information"""
+        # Configure mock
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "Thanks for providing your information. I'll help you with the application process."
+        mock_openai.return_value = mock_response
+        
+        # Create a test session
+        session = self.chatbot_service.get_or_create_session()
+        
+        # Send a message with applicant information
+        message = "Hi, my name is John Smith. I'm interested in applying. My email is john@example.com and my phone number is 555-123-4567. I have 2 years of driving experience with my car and I'm available part-time on weekends."
+        
+        result = self.chatbot_service.send_message(session, message)
+        
+        # Check that applicant information was extracted
+        session.refresh_from_db()
+        self.assertEqual(session.applicant_name, "John Smith")
+        self.assertEqual(session.applicant_email, "john@example.com")
+        self.assertEqual(session.applicant_phone, "555-123-4567")
+        self.assertEqual(session.vehicle_type, "car")
+        self.assertEqual(session.driving_experience, "2 years")
+        self.assertTrue("part-time" in session.availability.lower())
+        
+        # Check that Google Sheet was updated
+        self.assertTrue(session.google_sheet_updated)
+        
+    def test_dashboard_access(self):
+        """Test that the dashboard is only accessible to staff users"""
+        # Create a regular user
+        from django.contrib.auth.models import User
+        user = User.objects.create_user(username='testuser', password='testpass')
+        
+        # Test access as regular user
+        self.client.force_login(user)
+        response = self.client.get(reverse('chatbot:dashboard'))
+        self.assertEqual(response.status_code, 403)
+        
+        # Make user a staff member
+        user.is_staff = True
+        user.save()
+        
+        # Test access as staff
+        response = self.client.get(reverse('chatbot:dashboard'))
+        self.assertEqual(response.status_code, 200)
+```
+
+### 12. Test Simulation Script
+
+Create `chatbot/management/commands/simulate_chats.py`:
+
+```python
+from django.core.management.base import BaseCommand
+from chatbot.services import ChatbotService
+from chatbot.models import ChatSession
+import time
+import random
+
+class Command(BaseCommand):
+    help = 'Simulate chatbot conversations to test Google Sheets integration'
+
+    def handle(self, *args, **options):
+        # Test data
+        test_users = [
+            {
+                "initial_message": "Hi, I'm interested in becoming a delivery driver.",
+                "name": "Alex Johnson",
+                "email": "alex.johnson@example.com",
+                "phone": "555-101-2020",
+                "vehicle": "car",
+                "experience": "1 year",
+                "availability": "weekdays and evenings"
+            },
+            {
+                "initial_message": "Hello, what's required to apply for delivery driver job?",
+                "name": "Samantha Lee",
+                "email": "sam.lee@example.com",
+                "phone": "555-234-5678",
+                "vehicle": "motorcycle",
+                "experience": "3 years",
+                "availability": "full-time"
+            },
+            {
+                "initial_message": "How much can I earn as a driver with you?",
+                "name": "Michael Rodriguez",
+                "email": "mike.r@example.com",
+                "phone": "555-876-5432",
+                "vehicle": "van",
+                "experience": "5 years",
+                "availability": "weekends only"
+            }
+        ]
+        
+        chatbot = ChatbotService()
+        
+        self.stdout.write(self.style.SUCCESS('Starting chat simulations...'))
+        
+        for i, user_data in enumerate(test_users):
+            # Create a new session
+            session = chatbot.get_or_create_session()
+            
+            # First message
+            self.stdout.write(f"User {i+1}: {user_data['initial_message']}")
+            result = chatbot.send_message(session, user_data['initial_message'])
+            self.stdout.write(f"Assistant: {result['assistant_message'].content}")
+            time.sleep(1)
+            
+            # Provide personal info
+            info_message = f"My name is {user_data['name']} and my email is {user_data['email']}. You can reach me at {user_data['phone']}."
+            self.stdout.write(f"User {i+1}: {info_message}")
+            result = chatbot.send_message(session, info_message)
+            self.stdout.write(f"Assistant: {result['assistant_message'].content}")
+            time.sleep(1)
+            
+            # Provide vehicle and experience info
+            vehicle_message = f"I drive a {user_data['vehicle']} and have {user_data['experience']} of delivery experience. I'm available {user_data['availability']}."
+            self.stdout.write(f"User {i+1}: {vehicle_message}")
+            result = chatbot.send_message(session, vehicle_message)
+            self.stdout.write(f"Assistant: {result['assistant_message'].content}")
+            
+            # Check if Google Sheet was updated
+            session.refresh_from_db()
+            if session.google_sheet_updated:
+                self.stdout.write(self.style.SUCCESS(f"✓ Google Sheet updated for {user_data['name']}"))
+            else:
+                self.stdout.write(self.style.ERROR(f"✗ Google Sheet not updated for {user_data['name']}"))
+            
+            # Add a small delay between simulations
+            time.sleep(2)
+        
+        # Print final status
+        sessions = ChatSession.objects.filter(google_sheet_updated=True).count()
+        self.stdout.write(self.style.SUCCESS(f"Simulation complete. {sessions}/{len(test_users)} sessions updated in Google Sheet."))
+```
+
+### 13. Run the Simulation and Tests
+
+Execute these commands to test your implementation:
+
+```bash
+# Run migrations
+python manage.py makemigrations
+python manage.py migrate
+
+# Run the test suite
+python manage.py test chatbot
+
+# Run the simulation
+python manage.py simulate_chats
+```
+
+### 14. Verify Google Sheet Integration
+
+After running the simulation:
+
+1. Visit the Google Sheet at https://docs.google.com/spreadsheets/d/1SwVg13wGY8-yBxv3uzTiaeJ0pAhEPEgRBp_wRdOwluk/edit#gid=0
+2. Verify that test users have been added to the sheet
+3. Check that all fields are correctly populated
+4. Visit the dashboard at `/chat/dashboard/` to see chat sessions and their Google Sheet status
+
+### 15. Regular Usage
+
+Once implemented and tested:
+
+1. Add real PDF documents to the `/documents/` directory
+2. Update the system message as needed to match your specific requirements
+3

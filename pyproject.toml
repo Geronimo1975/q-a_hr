@@ -14,4 +14,12 @@ dependencies = [
     "google-auth-oauthlib>=1.2.1",
     "google-auth-httplib2>=0.2.0",
     "google-api-python-client>=2.167.0",
+    "sendgrid>=6.11.0",
+    "pypdf2>=3.0.1",
+    "langchain>=0.3.23",
+    "langchain-openai>=0.3.14",
+    "faiss-cpu>=1.10.0",
+    "openai>=1.75.0",
+    "django-channels>=0.7.0",
+    "channels-redis>=4.2.1",
 ]

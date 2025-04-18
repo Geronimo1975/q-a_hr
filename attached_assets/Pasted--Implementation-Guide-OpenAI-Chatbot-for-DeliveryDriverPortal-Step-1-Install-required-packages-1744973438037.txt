@@ -1,0 +1,735 @@
+# Implementation Guide: OpenAI Chatbot for DeliveryDriverPortal
+
+# Step 1: Install required packages
+# Add these to your pyproject.toml or install using pip:
+# pip install openai django-channels channels-redis
+
+# Step 2: Update settings.py to include the chatbot app and channels
+"""
+# In settings.py
+
+INSTALLED_APPS = [
+    # ... existing apps
+    'channels',
+    'chatbot',
+]
+
+# Add Channels configuration
+ASGI_APPLICATION = 'DeliveryDriverPortal.asgi.application'
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',  # For development
+    }
+}
+
+# OpenAI settings
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', 'your-api-key-here')  # Use environment variable in production
+OPENAI_MODEL = 'gpt-3.5-turbo'  # or 'gpt-4' depending on your needs
+"""
+
+# Step 3: Create a new Django app for the chatbot
+"""
+python manage.py startapp chatbot
+"""
+
+# Step 4: Create the chatbot models
+# chatbot/models.py
+"""
+from django.db import models
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+class ChatSession(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    session_id = models.CharField(max_length=100, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"Chat Session: {self.session_id}"
+
+class ChatMessage(models.Model):
+    ROLE_CHOICES = (
+        ('user', 'User'),
+        ('assistant', 'Assistant'),
+        ('system', 'System'),
+    )
+    
+    session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='messages')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    content = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.role}: {self.content[:30]}..."
+    
+    class Meta:
+        ordering = ['timestamp']
+"""
+
+# Step 5: Create the OpenAI chatbot service
+# chatbot/services.py
+"""
+import openai
+import uuid
+import json
+from django.conf import settings
+from .models import ChatSession, ChatMessage
+
+# Configure OpenAI
+openai.api_key = settings.OPENAI_API_KEY
+
+class ChatbotService:
+    @staticmethod
+    def get_or_create_session(user=None):
+        """Get existing session for user or create a new one"""
+        if user and user.is_authenticated:
+            # Try to find an existing session for this user
+            session = ChatSession.objects.filter(user=user).order_by('-updated_at').first()
+            if session:
+                return session
+        
+        # Create a new session
+        session_id = str(uuid.uuid4())
+        session = ChatSession.objects.create(
+            user=user if user and user.is_authenticated else None,
+            session_id=session_id
+        )
+        
+        # Add system message with context about the delivery driver recruitment
+        system_message = (
+            "You are a helpful assistant for a delivery driver recruitment platform. "
+            "You can help answer questions about the application process, requirements, "
+            "compensation, scheduling, and other related topics. Be friendly, professional, "
+            "and encouraging. Your goal is to help potential drivers understand the benefits "
+            "of joining our delivery team and to guide them through the application process."
+        )
+        
+        ChatMessage.objects.create(
+            session=session,
+            role='system',
+            content=system_message
+        )
+        
+        return session
+    
+    @staticmethod
+    def get_chat_history(session, limit=10):
+        """Retrieve the chat history for a session"""
+        return ChatMessage.objects.filter(session=session).order_by('timestamp')[:limit]
+    
+    @staticmethod
+    def send_message(session, message_text):
+        """
+        Send a user message and get the AI response
+        """
+        # Save user message
+        user_message = ChatMessage.objects.create(
+            session=session,
+            role='user',
+            content=message_text
+        )
+        
+        # Get all messages for this session to maintain context
+        messages = []
+        for msg in ChatMessage.objects.filter(session=session).order_by('timestamp'):
+            messages.append({
+                'role': msg.role,
+                'content': msg.content
+            })
+        
+        try:
+            # Call OpenAI API
+            response = openai.ChatCompletion.create(
+                model=settings.OPENAI_MODEL,
+                messages=messages,
+                max_tokens=500,
+                temperature=0.7,
+            )
+            
+            # Extract the assistant's response
+            assistant_message_content = response.choices[0].message.content
+            
+            # Save assistant response
+            assistant_message = ChatMessage.objects.create(
+                session=session,
+                role='assistant',
+                content=assistant_message_content
+            )
+            
+            return {
+                'user_message': user_message,
+                'assistant_message': assistant_message,
+                'success': True
+            }
+        except Exception as e:
+            # Handle errors
+            error_message = f"Sorry, I'm having trouble responding right now. Error: {str(e)}"
+            assistant_message = ChatMessage.objects.create(
+                session=session,
+                role='assistant',
+                content=error_message
+            )
+            
+            return {
+                'user_message': user_message,
+                'assistant_message': assistant_message,
+                'success': False,
+                'error': str(e)
+            }
+"""
+
+# Step 6: Create the chatbot views
+# chatbot/views.py
+"""
+from django.shortcuts import render
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
+import json
+
+from .services import ChatbotService
+from .models import ChatSession
+
+def chatbot_view(request):
+    """Render the chatbot interface"""
+    # Get or create a chat session for this user
+    if request.user.is_authenticated:
+        session = ChatbotService.get_or_create_session(request.user)
+    else:
+        # For anonymous users, try to get session from cookies
+        session_id = request.COOKIES.get('chat_session_id')
+        if session_id:
+            try:
+                session = ChatSession.objects.get(session_id=session_id)
+            except ChatSession.DoesNotExist:
+                session = ChatbotService.get_or_create_session()
+        else:
+            session = ChatbotService.get_or_create_session()
+    
+    # Get chat history
+    messages = ChatbotService.get_chat_history(session)
+    
+    context = {
+        'chat_session': session,
+        'messages': messages,
+    }
+    
+    response = render(request, 'chatbot/chat.html', context)
+    
+    # Set cookie for anonymous users
+    if not request.user.is_authenticated:
+        response.set_cookie('chat_session_id', session.session_id, max_age=3600*24*7)  # 7 days
+    
+    return response
+
+@require_POST
+@csrf_exempt  # In production, handle CSRF properly
+def send_message_api(request):
+    """API endpoint to send a message to the chatbot"""
+    try:
+        data = json.loads(request.body)
+        message = data.get('message', '').strip()
+        
+        if not message:
+            return JsonResponse({'error': 'Message cannot be empty'}, status=400)
+        
+        # Get the session
+        if request.user.is_authenticated:
+            session = ChatbotService.get_or_create_session(request.user)
+        else:
+            session_id = request.COOKIES.get('chat_session_id')
+            try:
+                session = ChatSession.objects.get(session_id=session_id)
+            except (ChatSession.DoesNotExist, TypeError):
+                return JsonResponse({'error': 'Invalid session'}, status=400)
+        
+        # Process the message
+        result = ChatbotService.send_message(session, message)
+        
+        if result['success']:
+            return JsonResponse({
+                'user_message': {
+                    'content': result['user_message'].content,
+                    'timestamp': result['user_message'].timestamp.isoformat(),
+                },
+                'assistant_message': {
+                    'content': result['assistant_message'].content,
+                    'timestamp': result['assistant_message'].timestamp.isoformat(),
+                }
+            })
+        else:
+            return JsonResponse({
+                'error': 'Failed to get response',
+                'message': result['assistant_message'].content
+            }, status=500)
+            
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+"""
+
+# Step 7: Create the URLs for the chatbot
+# chatbot/urls.py
+"""
+from django.urls import path
+from . import views
+
+app_name = 'chatbot'
+
+urlpatterns = [
+    path('', views.chatbot_view, name='chat'),
+    path('api/send-message/', views.send_message_api, name='send_message_api'),
+]
+"""
+
+# Update the main urls.py to include the chatbot URLs
+"""
+# In the main urls.py file
+
+urlpatterns = [
+    # ... existing URL patterns
+    path('chat/', include('chatbot.urls', namespace='chatbot')),
+]
+"""
+
+# Step 8: Create the templates for the chatbot
+# templates/chatbot/chat.html
+"""
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chat with Our Assistant | Delivery Driver Recruitment{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chat-container {
+        height: 500px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 15px;
+        background-color: #f8f9fa;
+    }
+    
+    .chat-input {
+        display: flex;
+        padding: 10px;
+        border-top: 1px solid #ddd;
+        background-color: #fff;
+    }
+    
+    .chat-input input {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-right: 10px;
+    }
+    
+    .chat-message {
+        margin-bottom: 15px;
+        display: flex;
+    }
+    
+    .user-message {
+        justify-content: flex-end;
+    }
+    
+    .assistant-message {
+        justify-content: flex-start;
+    }
+    
+    .message-bubble {
+        max-width: 70%;
+        padding: 10px 15px;
+        border-radius: 18px;
+        position: relative;
+    }
+    
+    .user-bubble {
+        background-color: #0084ff;
+        color: white;
+        border-bottom-right-radius: 5px;
+    }
+    
+    .assistant-bubble {
+        background-color: #e5e5ea;
+        color: #000;
+        border-bottom-left-radius: 5px;
+    }
+    
+    .message-time {
+        font-size: 0.7rem;
+        color: #999;
+        margin-top: 5px;
+        text-align: right;
+    }
+    
+    .typing-indicator {
+        display: none;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    
+    .typing-indicator .dot {
+        height: 8px;
+        width: 8px;
+        margin: 0 1px;
+        background-color: #999;
+        border-radius: 50%;
+        display: inline-block;
+        animation: typing 1.5s infinite ease-in-out;
+    }
+    
+    .typing-indicator .dot:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+    
+    .typing-indicator .dot:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+    
+    @keyframes typing {
+        0% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+        100% { transform: translateY(0); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <h1 class="mb-4">Chat with our Recruitment Assistant</h1>
+            
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chatMessages">
+                            {% for message in messages %}
+                                {% if message.role == 'user' %}
+                                    <div class="chat-message user-message">
+                                        <div class="message-bubble user-bubble">
+                                            {{ message.content }}
+                                            <div class="message-time">{{ message.timestamp|date:"g:i A" }}</div>
+                                        </div>
+                                    </div>
+                                {% elif message.role == 'assistant' %}
+                                    <div class="chat-message assistant-message">
+                                        <div class="message-bubble assistant-bubble">
+                                            {{ message.content }}
+                                            <div class="message-time">{{ message.timestamp|date:"g:i A" }}</div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            {% empty %}
+                                <div class="chat-message assistant-message">
+                                    <div class="message-bubble assistant-bubble">
+                                        Hello! I'm your delivery driver recruitment assistant. How can I help you today? You can ask me about job requirements, the application process, compensation, or anything else about becoming a delivery driver with us.
+                                        <div class="message-time">Just now</div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                            
+                            <div class="typing-indicator" id="typingIndicator">
+                                <div class="message-bubble assistant-bubble" style="padding: 10px 20px;">
+                                    <div class="dot"></div>
+                                    <div class="dot"></div>
+                                    <div class="dot"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="chat-input">
+                            <input type="text" id="messageInput" placeholder="Type your message..." class="form-control">
+                            <button id="sendButton" class="btn btn-primary">
+                                <i class="bi bi-send"></i> Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <p class="text-muted">
+                    <small>
+                        <i class="bi bi-info-circle"></i> 
+                        Our chat assistant is powered by AI and can answer questions about becoming a delivery driver with us. For urgent matters, please contact us directly.
+                    </small>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const chatMessages = document.getElementById('chatMessages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typingIndicator');
+        
+        // Scroll to bottom of chat
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // Initial scroll to bottom
+        scrollToBottom();
+        
+        // Send message function
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            // Clear input
+            messageInput.value = '';
+            
+            // Add user message to chat
+            const userMessageHTML = `
+                <div class="chat-message user-message">
+                    <div class="message-bubble user-bubble">
+                        ${message}
+                        <div class="message-time">Just now</div>
+                    </div>
+                </div>
+            `;
+            
+            // Insert message before typing indicator
+            chatMessages.insertAdjacentHTML('beforeend', userMessageHTML);
+            scrollToBottom();
+            
+            // Show typing indicator
+            typingIndicator.style.display = 'flex';
+            scrollToBottom();
+            
+            // Send message to server
+            fetch('{% url "chatbot:send_message_api" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: message
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Hide typing indicator
+                typingIndicator.style.display = 'none';
+                
+                if (data.error) {
+                    // Handle error
+                    const errorMessageHTML = `
+                        <div class="chat-message assistant-message">
+                            <div class="message-bubble assistant-bubble">
+                                Sorry, there was an error: ${data.error}
+                                <div class="message-time">Just now</div>
+                            </div>
+                        </div>
+                    `;
+                    chatMessages.insertAdjacentHTML('beforeend', errorMessageHTML);
+                } else {
+                    // Add assistant response
+                    const assistantMessageHTML = `
+                        <div class="chat-message assistant-message">
+                            <div class="message-bubble assistant-bubble">
+                                ${data.assistant_message.content}
+                                <div class="message-time">Just now</div>
+                            </div>
+                        </div>
+                    `;
+                    chatMessages.insertAdjacentHTML('beforeend', assistantMessageHTML);
+                }
+                
+                scrollToBottom();
+            })
+            .catch(error => {
+                // Hide typing indicator
+                typingIndicator.style.display = 'none';
+                
+                console.error('Error:', error);
+                const errorMessageHTML = `
+                    <div class="chat-message assistant-message">
+                        <div class="message-bubble assistant-bubble">
+                            Sorry, there was an error processing your request. Please try again later.
+                            <div class="message-time">Just now</div>
+                        </div>
+                    </div>
+                `;
+                chatMessages.insertAdjacentHTML('beforeend', errorMessageHTML);
+                scrollToBottom();
+            });
+        }
+        
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+        
+        messageInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    });
+</script>
+{% endblock %}
+"""
+
+# Step 9: Update the context processor to add chatbot link to navigation
+"""
+# In your context processor or base.html template
+
+# Add a link to the chat in your navigation menu
+<li class="nav-item">
+    <a class="nav-link" href="{% url 'chatbot:chat' %}">
+        <i class="bi bi-chat-dots"></i> Chat with Us
+    </a>
+</li>
+"""
+
+# Step 10: Create a custom training data file for your chatbot
+# chatbot/management/commands/load_chatbot_training.py
+"""
+from django.core.management.base import BaseCommand
+from chatbot.models import ChatSession, ChatMessage
+import uuid
+import json
+
+class Command(BaseCommand):
+    help = 'Load predefined training data for the chatbot'
+
+    def handle(self, *args, **options):
+        # Create a system session for training data
+        session_id = f"training-{uuid.uuid4()}"
+        session = ChatSession.objects.create(session_id=session_id)
+        
+        # Define your training data - examples of Q&A specific to driver recruitment
+        training_data = [
+            {
+                "question": "What are the requirements to become a delivery driver?",
+                "answer": "To become a delivery driver with us, you need:\n\n1. A valid driver's license\n2. Access to a reliable vehicle\n3. A smartphone with data plan\n4. To be at least 18 years old\n5. Clean driving record\n6. Pass a background check\n\nThe application process is simple and can be completed online."
+            },
+            {
+                "question": "How much can I earn as a delivery driver?",
+                "answer": "As a delivery driver, you can earn a competitive base pay plus incentives. On average, our drivers earn between €15-25 per hour including tips. Earnings vary based on your location, hours worked, and delivery volume. We offer weekly payment options and transparent earning structures."
+            },
+            {
+                "question": "Can I choose my own schedule?",
+                "answer": "Yes! One of the biggest benefits of working with us is flexibility. You can choose shifts that fit your schedule, including part-time and full-time opportunities. Whether you're looking for weekday work, evenings, or weekends, you can create a schedule that works for you."
+            },
+            {
+                "question": "What is the application process like?",
+                "answer": "Our application process is quick and straightforward:\n\n1. Fill out the online application (takes about 5-10 minutes)\n2. We'll review your information and conduct a background check\n3. Complete a brief online orientation\n4. Start delivering and earning!\n\nMany drivers are approved within 1-3 business days."
+            },
+            {
+                "question": "Do I need my own car?",
+                "answer": "You can use your own vehicle or, in some locations, we offer company vehicles for deliveries. If using your own vehicle, we require it to be reliable and in good working condition. We cover certain types of insurance during active deliveries."
+            },
+            {
+                "question": "How do I apply?",
+                "answer": "Applying is easy! Just click the 'Apply Now' button on our homepage to start the application process. You'll need to provide some basic information, including your contact details, vehicle information, and availability. If you have any issues with the application, feel free to contact our support team."
+            },
+            {
+                "question": "What areas do you operate in?",
+                "answer": "We currently operate in major cities across Germany, with a focus on Hamburg, Berlin, Munich, and Cologne. We're continuously expanding to new areas. During the application process, you'll be able to select your preferred delivery zone within your city."
+            },
+            {
+                "question": "Are there any fees to start?",
+                "answer": "No, there are no application fees or startup costs to become a delivery driver with us. You'll need your own smartphone with a data plan and, if using your own vehicle, you're responsible for your own fuel and maintenance costs."
+            },
+            {
+                "question": "How long does it take to get approved?",
+                "answer": "Most applications are processed within 1-3 business days, depending on the volume of applications and the time it takes to complete background checks. Once approved, you can start accepting deliveries immediately after completing the orientation."
+            },
+            {
+                "question": "What kind of support do you offer drivers?",
+                "answer": "We provide comprehensive support to all our drivers including:\n\n- 24/7 support line for urgent issues during deliveries\n- Dedicated driver support team\n- Regular app updates and improvements\n- Driver community forums\n- Insurance coverage during active deliveries\n- Training resources and tips for maximizing earnings"
+            }
+        ]
+        
+        # Add the training data to the system
+        for item in training_data:
+            # Add user question
+            ChatMessage.objects.create(
+                session=session,
+                role='user',
+                content=item['question']
+            )
+            
+            # Add assistant answer
+            ChatMessage.objects.create(
+                session=session,
+                role='assistant',
+                content=item['answer']
+            )
+        
+        self.stdout.write(self.style.SUCCESS(f'Successfully loaded {len(training_data)} training examples'))
+"""
+
+# Step 11: Update the asgi.py file to support WebSockets (optional for real-time chat)
+"""
+# DeliveryDriverPortal/asgi.py
+import os
+from django.core.asgi import get_asgi_application
+from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.auth import AuthMiddlewareStack
+import chatbot.routing  # You would need to create this
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'DeliveryDriverPortal.settings')
+
+application = ProtocolTypeRouter({
+    "http": get_asgi_application(),
+    "websocket": AuthMiddlewareStack(
+        URLRouter(
+            chatbot.routing.websocket_urlpatterns
+        )
+    ),
+})
+"""
+
+# Step 12: Implementation notes for Replit
+
+"""
+Implementation Notes for Replit:
+
+1. Environment Variables:
+   - Add your OPENAI_API_KEY to Replit Secrets (Environment variables)
+   - In Replit, click on "Secrets" in the left sidebar to add your API key
+
+2. Database Setup:
+   - Run migrations to create the necessary tables:
+     python manage.py makemigrations chatbot
+     python manage.py migrate
+
+3. Load Training Data:
+   - Run the management command to load predefined Q&A:
+     python manage.py load_chatbot_training
+
+4. Resource Considerations:
+   - Be mindful of API usage costs with OpenAI
+   - Consider implementing caching for common questions
+   - Monitor your usage to avoid unexpected charges
+
+5. Security:
+   - Never expose your API key in client-side code
+   - Implement rate limiting to prevent abuse
+   - Consider adding CAPTCHA for anonymous users
+
+6. For Production:
+   - Use a proper Redis backend for Channels instead of InMemoryChannelLayer
+   - Implement proper CSRF protection (remove @csrf_exempt)
+   - Add more sophisticated error handling and logging
+"""
+
+# Complete implementation with a simple chatbot that can be deployed to Replit
