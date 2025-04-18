@@ -83,14 +83,14 @@
                     <!-- Auth Links -->
                     {% if user.is_authenticated %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'account_logout' %}">{% trans "Logout" %}</a>
+                            <a class="nav-link" href="{% url 'account_logout' %}">{{ "Log Out"|direct_translate }}</a>
                         </li>
                     {% else %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'account_login' %}">{% trans "Login" %}</a>
+                            <a class="nav-link" href="{% url 'account_login' %}">{{ "Sign In"|direct_translate }}</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link btn btn-outline-light btn-sm ms-2 px-3" href="{% url 'account_signup' %}">{% trans "Register" %}</a>
+                            <a class="nav-link btn btn-outline-light btn-sm ms-2 px-3" href="{% url 'account_signup' %}">{{ "Sign Up"|direct_translate }}</a>
                         </li>
                     {% endif %}
                 </ul>
@@ -118,16 +118,16 @@
         <a href="{% url 'chatbot:chat' %}" class="btn btn-primary rounded-circle shadow-lg d-flex align-items-center justify-content-center">
             <i class="bi bi-chat-dots-fill"></i>
         </a>
-        <div class="chatbot-tooltip">{% trans "How can I help?" %}</div>
+        <div class="chatbot-tooltip">{{ "Chat with Us"|direct_translate }}</div>
     </div>
 
     <footer class="text-center text-lg-start mt-5">
         <div class="container p-4">
             <div class="row">
                 <div class="col-lg-4 col-md-12 mb-4 mb-md-0" data-aos="fade-up">
-                    <h5 class="text-uppercase fw-bold mb-3">{% trans "Driver Recruitment" %}</h5>
+                    <h5 class="text-uppercase fw-bold mb-3">{{ "Become a Delivery Driver"|direct_translate }}</h5>
                     <p>
-                        {% trans "Join our team of professional delivery drivers. Complete the application process to start your journey with us." %}
+                        {{ "Join Our Team"|direct_translate }}
                     </p>
                     <div class="mt-4">
                         <a href="#" class="me-3 text-reset"><i class="bi bi-facebook fs-4"></i></a>
@@ -137,17 +137,17 @@
                     </div>
                 </div>
                 <div class="col-lg-4 col-md-6 mb-4 mb-md-0" data-aos="fade-up" data-aos-delay="100">
-                    <h5 class="text-uppercase fw-bold mb-3">{% trans "Quick Links" %}</h5>
+                    <h5 class="text-uppercase fw-bold mb-3">{{ "Quick Links"|direct_translate }}</h5>
                     <ul class="list-unstyled mb-0">
-                        <li class="mb-2"><a href="{% url 'home' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {% trans "Home" %}</a></li>
-                        <li class="mb-2"><a href="{% url 'account_signup' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {% trans "Apply Now" %}</a></li>
-                        <li class="mb-2"><a href="{% url 'account_login' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {% trans "Login" %}</a></li>
-                        <li class="mb-2"><a href="#" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {% trans "FAQ" %}</a></li>
+                        <li class="mb-2"><a href="{% url 'home' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {{ "Home"|direct_translate }}</a></li>
+                        <li class="mb-2"><a href="{% url 'account_signup' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {{ "Apply Now"|direct_translate }}</a></li>
+                        <li class="mb-2"><a href="{% url 'account_login' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {{ "Sign In"|direct_translate }}</a></li>
+                        <li class="mb-2"><a href="#" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {{ "Frequently Asked Questions"|direct_translate }}</a></li>
                     </ul>
                 </div>
                 <div class="col-lg-4 col-md-6 mb-4 mb-md-0" data-aos="fade-up" data-aos-delay="200">
-                    <h5 class="text-uppercase fw-bold mb-3">{% trans "Contact" %}</h5>
-                    <p class="mb-1"><i class="bi bi-geo-alt-fill me-2"></i> {% trans "Hamburg" %}</p>
+                    <h5 class="text-uppercase fw-bold mb-3">{{ "Contact"|direct_translate }}</h5>
+                    <p class="mb-1"><i class="bi bi-geo-alt-fill me-2"></i> Hamburg</p>
                     <p class="mb-1"><i class="bi bi-envelope-fill me-2"></i> fastdelivery@gti-europe.de</p>
                     <p class="mb-1"><i class="bi bi-telephone-fill me-2"></i> +49 162 453 2111</p>
                     <p class="mb-1"><i class="bi bi-clock-fill me-2"></i> 08:00-18:00</p>
@@ -156,10 +156,10 @@
         </div>
         <div class="text-center p-3">
             © 2025 George Sebastian Cucuiet | 
-            <a class="text-reset" href="{% url 'impressum' %}">{% trans "Impressum" %}</a> | 
-            <a class="text-reset" href="{% url 'privacy_policy' %}">{% trans "Privacy Policy" %}</a> | 
-            <a class="text-reset" href="{% url 'terms' %}">{% trans "Terms & Conditions" %}</a> | 
-            <a class="text-reset" href="{% url 'cookie_policy' %}">{% trans "Cookie Policy" %}</a>
+            <a class="text-reset" href="{% url 'impressum' %}">{{ "Impressum"|direct_translate }}</a> | 
+            <a class="text-reset" href="{% url 'privacy_policy' %}">{{ "Privacy Policy"|direct_translate }}</a> | 
+            <a class="text-reset" href="{% url 'terms' %}">{{ "Terms & Conditions"|direct_translate }}</a> | 
+            <a class="text-reset" href="{% url 'cookie_policy' %}">{{ "Cookie Policy"|direct_translate }}</a>
         </div>
     </footer>
 
@@ -169,13 +169,13 @@
             <div class="row align-items-center">
                 <div class="col-md-8 mb-3 mb-md-0">
                     <p class="mb-0">
-                        {% trans "This website uses cookies to provide you with the best experience on our website. By continuing to use the website, you agree to the use of cookies. For more information, please see our" %}
-                        <a href="{% url 'cookie_policy' %}" class="text-decoration-underline">{% trans "Cookie Policy" %}</a>.
+                        {{ "This website uses cookies to ensure you get the best experience on our website."|direct_translate }}
+                        <a href="{% url 'cookie_policy' %}" class="text-decoration-underline">{{ "Cookie Policy"|direct_translate }}</a>.
                     </p>
                 </div>
                 <div class="col-md-4 text-md-end">
-                    <button id="acceptCookies" class="btn btn-primary btn-sm me-2">{% trans "Accept" %}</button>
-                    <button id="rejectCookies" class="btn btn-outline-light btn-sm">{% trans "Decline" %}</button>
+                    <button id="acceptCookies" class="btn btn-primary btn-sm me-2">{{ "Accept"|direct_translate }}</button>
+                    <button id="rejectCookies" class="btn btn-outline-light btn-sm">{{ "Decline"|direct_translate }}</button>
                 </div>
             </div>
         </div>
