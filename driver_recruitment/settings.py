@@ -129,6 +129,14 @@ ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE = True
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_LOGOUT_ON_GET = True
+# Let's disable the custom signup form for now to avoid circular imports
+# ACCOUNT_SIGNUP_FORM_CLASS = 'accounts.signup_forms.CustomSignupForm'
+
+# Instead, we'll add these fields to make sure they're required
+ACCOUNT_FORMS = {
+    'signup': 'allauth.account.forms.SignupForm',
+}
+ACCOUNT_SIGNUP_PASSWORD_ENTER_TWICE = True
 
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'home'
