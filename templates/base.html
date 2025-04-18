@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+{% load i18n %}
+<html lang="{{ LANGUAGE_CODE }}" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -54,16 +55,26 @@
                     <!-- Language Selector -->
                     <li class="nav-item dropdown me-3">
                         <a class="nav-link dropdown-toggle" href="#" id="languageDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-globe"></i> <span class="d-none d-md-inline">EN</span>
+                            <i class="bi bi-globe"></i> <span class="d-none d-md-inline">{% if LANGUAGE_CODE %}{{ LANGUAGE_CODE|upper }}{% else %}DE{% endif %}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="languageDropdown">
-                            <li><a class="dropdown-item" href="#" data-lang="en">English</a></li>
-                            <li><a class="dropdown-item" href="#" data-lang="de">Deutsch</a></li>
-                            <li><a class="dropdown-item" href="#" data-lang="ro">Română</a></li>
-                            <li><a class="dropdown-item" href="#" data-lang="pl">Polski</a></li>
-                            <li><a class="dropdown-item" href="#" data-lang="uk">Українська</a></li>
-                            <li><a class="dropdown-item" href="#" data-lang="ar">العربية</a></li>
-                            <li><a class="dropdown-item" href="#" data-lang="tr">Türkçe</a></li>
+                            {% load i18n %}
+                            {% get_current_language as LANGUAGE_CODE %}
+                            {% get_available_languages as LANGUAGES %}
+                            {% get_language_info_list for LANGUAGES as languages %}
+                            
+                            {% for language in languages %}
+                                <li>
+                                    <form action="{% url 'set_language' %}" method="post" style="display:inline;">
+                                        {% csrf_token %}
+                                        <input name="next" type="hidden" value="{{ request.get_full_path }}">
+                                        <input name="language" type="hidden" value="{{ language.code }}">
+                                        <button type="submit" class="dropdown-item {% if language.code == LANGUAGE_CODE %}active{% endif %}">
+                                            {{ language.name_local }}
+                                        </button>
+                                    </form>
+                                </li>
+                            {% endfor %}
                         </ul>
                     </li>
                     
@@ -213,24 +224,7 @@
                 }
             });
             
-            // Language switcher
-            const languageItems = document.querySelectorAll('[data-lang]');
-            languageItems.forEach(item => {
-                item.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const lang = this.getAttribute('data-lang');
-                    localStorage.setItem('preferredLanguage', lang);
-                    // Here we'd normally do a real language change
-                    // For now, we'll just update the language indicator
-                    document.querySelector('#languageDropdown span').textContent = lang.toUpperCase();
-                });
-            });
-            
-            // Check for saved language preference
-            const savedLanguage = localStorage.getItem('preferredLanguage');
-            if (savedLanguage) {
-                document.querySelector('#languageDropdown span').textContent = savedLanguage.toUpperCase();
-            }
+            // Language is now handled by Django's built-in language selection system
             
             // Cookie Consent
             const cookieConsent = document.getElementById('cookieConsent');

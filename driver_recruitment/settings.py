@@ -48,6 +48,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',  # Add locale middleware for language detection
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -112,10 +113,28 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+LANGUAGE_CODE = 'de'  # German as default language
+TIME_ZONE = 'Europe/Berlin'  # German timezone
 USE_I18N = True
+USE_L10N = True
 USE_TZ = True
+
+# Available languages
+from django.utils.translation import gettext_lazy as _
+LANGUAGES = [
+    ('de', _('German')),
+    ('en', _('English')),
+    ('ro', _('Romanian')),
+    ('pl', _('Polish')),
+    ('uk', _('Ukrainian')),
+    ('ar', _('Arabic')),
+    ('tr', _('Turkish')),
+]
+
+# Path where Django looks for translation files
+LOCALE_PATHS = [
+    os.path.join(BASE_DIR, 'locale'),
+]
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
