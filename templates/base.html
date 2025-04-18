@@ -32,14 +32,14 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'home' %}">Home</a>
+                        <a class="nav-link" href="{% url 'home' %}">{% trans "Home" %}</a>
                     </li>
                     {% if user.is_authenticated %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a>
+                            <a class="nav-link" href="{% url 'dashboard' %}">{% trans "Dashboard" %}</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'profile' %}">Profile</a>
+                            <a class="nav-link" href="{% url 'profile' %}">{% trans "Profile" %}</a>
                         </li>
                     {% endif %}
                 </ul>
@@ -81,14 +81,14 @@
                     <!-- Auth Links -->
                     {% if user.is_authenticated %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'account_logout' %}">Logout</a>
+                            <a class="nav-link" href="{% url 'account_logout' %}">{% trans "Logout" %}</a>
                         </li>
                     {% else %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'account_login' %}">Login</a>
+                            <a class="nav-link" href="{% url 'account_login' %}">{% trans "Login" %}</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link btn btn-outline-light btn-sm ms-2 px-3" href="{% url 'account_signup' %}">Register</a>
+                            <a class="nav-link btn btn-outline-light btn-sm ms-2 px-3" href="{% url 'account_signup' %}">{% trans "Register" %}</a>
                         </li>
                     {% endif %}
                 </ul>
@@ -116,7 +116,7 @@
         <a href="{% url 'chatbot:chat' %}" class="btn btn-primary rounded-circle shadow-lg d-flex align-items-center justify-content-center">
             <i class="bi bi-chat-dots-fill"></i>
         </a>
-        <div class="chatbot-tooltip">How can I help?</div>
+        <div class="chatbot-tooltip">{% trans "How can I help?" %}</div>
     </div>
 
     <footer class="text-center text-lg-start mt-5">
