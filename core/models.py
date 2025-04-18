@@ -1,5 +1,46 @@
 from django.db import models
 from django.conf import settings
+from django.utils.translation import gettext_lazy as _
+
+
+class EditableContent(models.Model):
+    """Model for storing editable content with translation support."""
+    identifier = models.CharField(max_length=100, unique=True, help_text="Unique identifier for this content piece")
+    
+    # Content in different languages - these should match the LANGUAGES in settings.py
+    content_de = models.TextField(verbose_name=_("German Content"), blank=True)
+    content_en = models.TextField(verbose_name=_("English Content"), blank=True)
+    content_pl = models.TextField(verbose_name=_("Polish Content"), blank=True)
+    content_ro = models.TextField(verbose_name=_("Romanian Content"), blank=True)
+    content_uk = models.TextField(verbose_name=_("Ukrainian Content"), blank=True)
+    content_ar = models.TextField(verbose_name=_("Arabian Content"), blank=True)
+    content_tr = models.TextField(verbose_name=_("Turkish Content"), blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Editable Content"
+        verbose_name_plural = "Editable Contents"
+        ordering = ["identifier"]
+    
+    def __str__(self):
+        return self.identifier
+    
+    def get_content(self, language_code='de'):
+        """Get content in the specified language."""
+        language_code = language_code.lower()
+        if language_code not in ['de', 'en', 'pl', 'ro', 'uk', 'ar', 'tr']:
+            language_code = 'de'  # Default to German
+        
+        content_field = f'content_{language_code}'
+        content = getattr(self, content_field, '')
+        
+        # If content is empty for the requested language, fall back to German
+        if not content and language_code != 'de':
+            return self.content_de
+        
+        return content
 
 
 class GoogleSheetsConfig(models.Model):

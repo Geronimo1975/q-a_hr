@@ -2,6 +2,7 @@ from django import template
 from django.utils.safestring import mark_safe
 from django.utils.translation import get_language, gettext as _
 from django.conf import settings
+from core.models import EditableContent
 import logging
 
 # Create a logger instance
@@ -192,3 +193,33 @@ def direct_translate_tag(text, target_language=None):
     """
     # Use the same implementation as the filter
     return direct_translate_filter(text, target_language)
+
+@register.simple_tag(name='editable_content')
+def editable_content_tag(identifier, default=''):
+    """
+    Get content from the database that can be edited by admins.
+    Content will be automatically translated based on the current language.
+    
+    Usage: {% editable_content "hero_title" "Default Title If Not Found" %}
+    """
+    try:
+        # Get the current language
+        language_code = get_language()
+        if language_code:
+            language_code = language_code.split('-')[0]  # Convert e.g. 'en-us' to 'en'
+        else:
+            language_code = 'de'  # Default to German
+        
+        # Try to get the content from the database
+        content = EditableContent.objects.filter(identifier=identifier).first()
+        if content:
+            # Return content in the current language
+            return mark_safe(content.get_content(language_code))
+        
+        # If no content found, log and return default
+        logger.warning(f"No editable content found for identifier: {identifier}")
+        return default
+    except Exception as e:
+        # In case of any error, log it and return the default
+        logger.error(f"Error getting editable content '{identifier}': {str(e)}")
+        return default

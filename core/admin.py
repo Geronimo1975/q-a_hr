@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import GoogleSheetsConfig
+from django.conf import settings
+from .models import GoogleSheetsConfig, EditableContent
 
 
 class GoogleSheetsConfigAdmin(admin.ModelAdmin):
@@ -32,3 +33,19 @@ class GoogleSheetsConfigAdmin(admin.ModelAdmin):
         return False
 
 admin.site.register(GoogleSheetsConfig, GoogleSheetsConfigAdmin)
+
+class EditableContentAdmin(admin.ModelAdmin):
+    list_display = ('identifier', 'updated_at')
+    search_fields = ('identifier', 'content_de', 'content_en')
+    fieldsets = (
+        (None, {
+            'fields': ('identifier',),
+            'description': 'Unique identifier for this content. This will be used in templates to load this content.'
+        }),
+        ('Content in Different Languages', {
+            'fields': ('content_de', 'content_en', 'content_pl', 'content_ro', 'content_uk', 'content_ar', 'content_tr'),
+            'description': 'Enter the content in different languages. If a language is left blank, the German content will be used as fallback.'
+        }),
+    )
+
+admin.site.register(EditableContent, EditableContentAdmin)
