@@ -88,16 +88,10 @@ def questionnaire(request, stage=1):
             if settings.GOOGLE_SHEETS.get('enabled', False):
                 sheet_id = settings.GOOGLE_SHEETS.get('spreadsheet_id')
                 if sheet_id:
-                    # Try using the service account method first
+                    # Use the standard Google Sheets method
                     try:
-                        sheets_updated = update_sheet_service(user, stage, sheet_id)
-                        if not sheets_updated:
-                            # Fall back to direct API key method
-                            sheets_updated = update_sheet_direct(user, stage, sheet_id)
-                            
-                        if not sheets_updated:
-                            # If both methods fail, try the original OAuth method
-                            sheets_updated = update_sheet_with_answers(user, stage, sheet_id)
+                        from utils.google_sheets import update_sheet_with_answers
+                        sheets_updated = update_sheet_with_answers(user, stage, sheet_id)
                             
                         if not sheets_updated:
                             messages.warning(request, "Responses were saved locally but could not be exported to Google Sheets.")
