@@ -1,0 +1,77 @@
+Google Sheets Integration for DeliveryDriverPortal
+Overview
+This prompt provides comprehensive instructions for integrating Google Sheets with your DeliveryDriverPortal Replit project. This integration enables:
+
+Syncing recruitment questions with their order numbers to a dedicated sheet
+Storing applicant responses in a structured format
+Creating a testing framework to verify the connection
+Ensuring proper authentication with Google's API
+
+Implementation Steps
+1. Environment Setup
+First, set these environment variables in your Replit project:
+GOOGLE_SHEETS_ENABLED=True
+GOOGLE_SHEETS_ID=1SwVg13wGY8-yBxv3uzTiaeJ0pAhEPEgRBp_wRdOwluk
+To set these:
+
+Click on the "Secrets" tool (lock icon) in the Replit sidebar
+Add each key-value pair separately
+
+2. Install Required Packages
+Add these packages to your Replit environment:
+bashpip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+Add them to your requirements.txt or pyproject.toml file:
+google-auth==2.23.0
+google-auth-oauthlib==1.0.0
+google-auth-httplib2==0.1.0
+google-api-python-client==2.97.0
+3. Create Google Sheets Utility Module
+Create a directory named utils if it doesn't exist yet, then add a new file called google_sheets.py inside it with the Google Sheets integration code.
+4. Create Google Service Account Credentials
+
+Create a file named create_credentials.py in your Replit project root
+Run this script to create the initial credentials file:
+
+bashpython create_credentials.py
+
+Add your service account's private key details to the credentials.json file
+
+5. Create Connection Test Script
+Create a file named test_sheets_connection.py in your project root to test the Google Sheets connection.
+6. Update Your Models
+Ensure your Question model includes an order field to track question numbering.
+7. Add Admin Interface Enhancement
+Update your admin.py file to include question ordering and Google Sheets sync functionality.
+8. Integrate with your Form Submission Views
+Modify your view that handles form submissions to save answers to Google Sheets.
+9. Testing the Integration
+
+Run the connection test script from the Replit shell
+Use the admin interface to synchronize questions
+Verify data appears in your Google Sheet
+
+Troubleshooting
+If you encounter issues:
+
+Credentials Problems
+
+Ensure the credentials.json file contains valid service account information
+Verify the service account has edit access to the spreadsheet
+
+
+Connection Errors
+
+Run the test script for detailed error messages
+Check Replit's console logs for API errors
+
+
+Data Not Appearing
+
+Ensure the sync function is being called correctly
+Check for errors in the console logs
+
+
+Permission Issues
+
+Make sure the spreadsheet is shared with the service account email
+The service account needs editor permissions

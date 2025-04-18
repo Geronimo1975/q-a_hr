@@ -1,0 +1,640 @@
+# Google Sheets Integration for DeliveryDriverPortal
+
+## Overview
+
+This prompt provides comprehensive instructions for integrating Google Sheets with your DeliveryDriverPortal Replit project. This integration enables:
+
+1. Syncing recruitment questions with their order numbers to a dedicated sheet
+2. Storing applicant responses in a structured format
+3. Creating a testing framework to verify the connection
+4. Ensuring proper authentication with Google's API
+
+## Implementation Steps
+
+### 1. Environment Setup
+
+First, set these environment variables in your Replit project:
+
+```
+GOOGLE_SHEETS_ENABLED=True
+GOOGLE_SHEETS_ID=1SwVg13wGY8-yBxv3uzTiaeJ0pAhEPEgRBp_wRdOwluk
+```
+
+To set these:
+- Click on the "Secrets" tool (lock icon) in the Replit sidebar
+- Add each key-value pair separately
+
+### 2. Install Required Packages
+
+Add these packages to your Replit environment:
+
+```bash
+pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+```
+
+Add them to your requirements.txt or pyproject.toml file:
+
+```
+google-auth==2.23.0
+google-auth-oauthlib==1.0.0
+google-auth-httplib2==0.1.0
+google-api-python-client==2.97.0
+```
+
+### 3. Create Google Sheets Utility Module
+
+Create a directory named `utils` if it doesn't exist yet, then add a new file called `google_sheets.py` inside it with the following code:
+
+```python
+"""
+Google Sheets integration utilities for DeliveryDriverPortal
+"""
+
+import os
+import json
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+import logging
+
+logger = logging.getLogger(__name__)
+
+def get_sheets_service():
+    """
+    Creates and returns a Google Sheets service object
+    """
+    try:
+        # Check if environment variables are set
+        sheets_enabled = os.environ.get('GOOGLE_SHEETS_ENABLED')
+        sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+        
+        if not sheets_enabled or sheets_enabled.lower() != 'true':
+            logger.warning("Google Sheets integration is disabled (GOOGLE_SHEETS_ENABLED != True)")
+            return None
+            
+        if not sheets_id:
+            logger.error("Google Sheets ID is not set (GOOGLE_SHEETS_ID)")
+            return None
+        
+        # Get credentials from file
+        creds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'credentials.json')
+        
+        if not os.path.exists(creds_path):
+            logger.error(f"Credentials file not found at {creds_path}")
+            return None
+        
+        creds = Credentials.from_service_account_file(
+            creds_path,
+            scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
+        
+        # Build and return the service
+        service = build('sheets', 'v4', credentials=creds)
+        return service.spreadsheets()
+        
+    except Exception as e:
+        logger.error(f"Error creating Google Sheets service: {str(e)}")
+        return None
+
+def create_or_find_sheet(sheet_name):
+    """
+    Ensures a sheet with the given name exists in the spreadsheet
+    """
+    try:
+        sheets = get_sheets_service()
+        if not sheets:
+            return {"success": False, "error": "Could not initialize Sheets service"}
+        
+        sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+        
+        # Check if sheet exists
+        response = sheets.get(spreadsheetId=sheets_id).execute()
+        sheet_exists = False
+        
+        for sheet in response.get('sheets', []):
+            if sheet.get('properties', {}).get('title') == sheet_name:
+                sheet_exists = True
+                break
+        
+        # If sheet doesn't exist, create it
+        if not sheet_exists:
+            request = {
+                'addSheet': {
+                    'properties': {
+                        'title': sheet_name
+                    }
+                }
+            }
+            
+            sheets.batchUpdate(
+                spreadsheetId=sheets_id,
+                body={'requests': [request]}
+            ).execute()
+            
+            return {"success": True, "message": f"Sheet '{sheet_name}' created successfully"}
+        
+        return {"success": True, "message": f"Sheet '{sheet_name}' already exists"}
+        
+    except HttpError as e:
+        return {"success": False, "error": f"Google API error: {str(e)}"}
+    except Exception as e:
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
+def sync_questions_to_sheets():
+    """
+    Syncs all questions to the Questions sheet in Google Sheets
+    """
+    try:
+        # Import here to avoid circular imports
+        from recruitment.models import Question, QuestionStage
+        
+        sheets = get_sheets_service()
+        if not sheets:
+            return {"success": False, "error": "Could not initialize Sheets service"}
+        
+        sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+        
+        # Ensure Questions sheet exists
+        create_result = create_or_find_sheet("Questions")
+        if not create_result["success"]:
+            return create_result
+        
+        # Prepare data with headers
+        data = [
+            ["Nr.", "Question Text", "Question Type", "Stage", "Required"]
+        ]
+        
+        # Get all questions ordered by stage and then by order
+        questions = Question.objects.all().order_by('stage', 'order')
+        
+        # Add questions to data
+        for i, question in enumerate(questions, 1):
+            data.append([
+                i,  # Sequential number
+                question.question_text,
+                question.get_question_type_display(),
+                question.stage.name,
+                "Yes" if question.is_required else "No"
+            ])
+        
+        # Clear existing data and update
+        sheets.values().clear(
+            spreadsheetId=sheets_id,
+            range="Questions!A1:Z1000"  # Clear a large range to ensure all old data is removed
+        ).execute()
+        
+        sheets.values().update(
+            spreadsheetId=sheets_id,
+            range="Questions!A1",
+            valueInputOption="RAW",
+            body={"values": data}
+        ).execute()
+        
+        return {"success": True, "count": len(questions)}
+        
+    except Exception as e:
+        logger.error(f"Error syncing questions to sheets: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+def save_answer_to_sheets(user_id, question_id, answer_text):
+    """
+    Saves a user's answer to a question to Google Sheets
+    """
+    try:
+        # Import here to avoid circular imports
+        from recruitment.models import Question, Answer
+        from django.utils import timezone
+        
+        sheets = get_sheets_service()
+        if not sheets:
+            return {"success": False, "error": "Could not initialize Sheets service"}
+        
+        sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+        
+        # Ensure Answers sheet exists
+        create_result = create_or_find_sheet("Answers")
+        if not create_result["success"]:
+            return create_result
+        
+        # Get question details
+        question = Question.objects.get(id=question_id)
+        
+        # Prepare row data
+        row_data = [
+            [
+                str(timezone.now()),  # Timestamp
+                str(user_id),  # User ID
+                question.order,  # Question number/order
+                question.question_text,  # Question text
+                str(answer_text)  # Answer
+            ]
+        ]
+        
+        # Append to sheet
+        sheets.values().append(
+            spreadsheetId=sheets_id,
+            range="Answers!A1",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": row_data}
+        ).execute()
+        
+        return {"success": True}
+        
+    except Exception as e:
+        logger.error(f"Error saving answer to sheets: {str(e)}")
+        return {"success": False, "error": str(e)}
+```
+
+### 4. Create Google Service Account Credentials
+
+1. Create a file named `create_credentials.py` in your Replit project root:
+
+```python
+"""
+Script to create credentials.json file from service account information
+"""
+
+import os
+import json
+import sys
+from pathlib import Path
+
+def create_credentials_file():
+    """
+    Creates a credentials.json file with the service account details
+    """
+    print("Creating credentials.json file for Google Sheets API...")
+    
+    # Service account email from the screenshot
+    service_account_email = "deliverydriver-service-27@translate-457112.iam.gserviceaccount.com"
+    
+    # Check if existing env variables contain a credentials JSON
+    google_creds = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    
+    if google_creds:
+        try:
+            # If GOOGLE_APPLICATION_CREDENTIALS exists as JSON
+            creds_json = json.loads(google_creds)
+            print("Found credentials in GOOGLE_APPLICATION_CREDENTIALS environment variable")
+        except:
+            # Not JSON, might be a file path
+            if os.path.exists(google_creds):
+                try:
+                    with open(google_creds, 'r') as f:
+                        creds_json = json.load(f)
+                    print(f"Loaded credentials from file: {google_creds}")
+                except:
+                    creds_json = None
+            else:
+                creds_json = None
+    else:
+        creds_json = None
+    
+    if not creds_json:
+        # Create a basic credentials structure
+        creds_json = {
+            "type": "service_account",
+            "project_id": "translate-457112",
+            "private_key_id": "",  # User needs to fill this in
+            "private_key": "",     # User needs to fill this in
+            "client_email": service_account_email,
+            "client_id": "",       # User needs to fill this in
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{service_account_email.replace('@', '%40')}"
+        }
+        print("Created template credentials structure - you will need to fill in private key details")
+    
+    # Get the project root directory
+    BASE_DIR = Path(__file__).resolve().parent
+    
+    # Save the credentials file
+    creds_path = os.path.join(BASE_DIR, 'credentials.json')
+    
+    with open(creds_path, 'w') as f:
+        json.dump(creds_json, f, indent=2)
+    
+    print(f"Credentials file created at: {creds_path}")
+    print("IMPORTANT: Make sure this file contains the correct private key information!")
+    print("The Google Sheet must be shared with:", service_account_email)
+    
+    return creds_path
+
+if __name__ == "__main__":
+    create_credentials_file()
+```
+
+2. Run this script to create the initial credentials file:
+
+```bash
+python create_credentials.py
+```
+
+3. Add your service account's private key details to the credentials.json file
+
+### 5. Create Connection Test Script
+
+Create a file named `test_sheets_connection.py` in your project root:
+
+```python
+"""
+Test script for Google Sheets connection
+"""
+
+import os
+import sys
+import json
+from pathlib import Path
+
+# Add the project directory to the path so we can import from utils
+BASE_DIR = Path(__file__).resolve().parent
+sys.path.append(str(BASE_DIR))
+
+try:
+    # Try to import Django settings
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'driver_recruitment.settings')
+    import django
+    django.setup()
+    from utils.google_sheets import test_connection, create_or_find_sheet, sync_questions_to_sheets
+    using_django = True
+except:
+    using_django = False
+
+def test_env_variables():
+    """Test if the required environment variables are set"""
+    sheets_enabled = os.environ.get('GOOGLE_SHEETS_ENABLED')
+    sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+    
+    print("Environment Variables:")
+    print(f"GOOGLE_SHEETS_ENABLED: {sheets_enabled}")
+    print(f"GOOGLE_SHEETS_ID: {sheets_id}")
+    
+    if not sheets_enabled or sheets_enabled.lower() != 'true':
+        print("WARNING: Google Sheets integration is disabled (GOOGLE_SHEETS_ENABLED != True)")
+        return False
+        
+    if not sheets_id:
+        print("ERROR: Google Sheets ID is not set (GOOGLE_SHEETS_ID)")
+        return False
+    
+    return True
+
+def test_with_google_api():
+    """Test direct connection to Google Sheets API"""
+    try:
+        from google.oauth2.service_account import Credentials
+        from googleapiclient.discovery import build
+        
+        # Look for credentials.json in several possible locations
+        possible_paths = [
+            os.path.join(BASE_DIR, 'credentials.json'),
+            os.path.join(BASE_DIR, 'utils', 'credentials.json'),
+            os.path.join(BASE_DIR, '..', 'credentials.json')
+        ]
+        
+        creds_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                creds_path = path
+                break
+        
+        if not creds_path:
+            print("ERROR: credentials.json file not found")
+            return False
+        
+        print(f"Using credentials from: {creds_path}")
+        
+        # Load credentials
+        creds = Credentials.from_service_account_file(
+            creds_path,
+            scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
+        
+        # Build API service
+        service = build('sheets', 'v4', credentials=creds)
+        sheets = service.spreadsheets()
+        
+        # Get spreadsheet ID from environment
+        sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+        
+        # Try to get spreadsheet info
+        response = sheets.get(spreadsheetId=sheets_id).execute()
+        
+        print("\nSpreadsheet Information:")
+        print(f"Title: {response.get('properties', {}).get('title')}")
+        print("Sheets:")
+        for sheet in response.get('sheets', []):
+            print(f"  - {sheet.get('properties', {}).get('title')}")
+        
+        # Write a test cell
+        import datetime
+        test_data = [["Test connection", str(datetime.datetime.now())]]
+        
+        result = sheets.values().update(
+            spreadsheetId=sheets_id,
+            range="Sheet1!A1:B1",
+            valueInputOption="RAW",
+            body={"values": test_data}
+        ).execute()
+        
+        print("\nTest write successful!")
+        print(f"Updated {result.get('updatedCells')} cells")
+        
+        return True
+        
+    except Exception as e:
+        print(f"\nERROR connecting to Google Sheets API: {str(e)}")
+        return False
+
+def create_test_sheet():
+    """Create a test sheet for questions and answers"""
+    if not using_django:
+        print("Django not set up, skipping create_test_sheet")
+        return False
+    
+    print("\nCreating/finding required sheets...")
+    
+    # Create Questions sheet
+    questions_result = create_or_find_sheet("Questions")
+    print(f"Questions sheet: {questions_result.get('message', 'Error')}")
+    
+    # Create Answers sheet
+    answers_result = create_or_find_sheet("Answers")
+    print(f"Answers sheet: {answers_result.get('message', 'Error')}")
+    
+    return questions_result.get('success', False) and answers_result.get('success', False)
+
+def run_all_tests():
+    """Run all connection tests"""
+    print("=" * 50)
+    print("GOOGLE SHEETS CONNECTION TESTER")
+    print("=" * 50)
+    
+    # Check environment variables
+    print("\n[1/3] Checking environment variables...")
+    env_ok = test_env_variables()
+    
+    # Test Google API connection
+    print("\n[2/3] Testing Google Sheets API connection...")
+    api_ok = test_with_google_api()
+    
+    # Create test sheets if using Django
+    print("\n[3/3] Setting up required sheets...")
+    sheets_ok = True
+    if using_django and env_ok and api_ok:
+        sheets_ok = create_test_sheet()
+    elif not using_django:
+        print("Django not set up, skipping sheet creation")
+    
+    # Print summary
+    print("\n" + "=" * 50)
+    print("TEST RESULTS SUMMARY")
+    print("=" * 50)
+    print(f"Environment Variables: {'✓ OK' if env_ok else '✗ FAILED'}")
+    print(f"Google Sheets API: {'✓ OK' if api_ok else '✗ FAILED'}")
+    if using_django:
+        print(f"Sheet Setup: {'✓ OK' if sheets_ok else '✗ FAILED'}")
+    
+    if env_ok and api_ok and sheets_ok:
+        print("\n✅ ALL TESTS PASSED - Google Sheets integration is working correctly!")
+        
+        if using_django:
+            # Sync questions if available
+            print("\nSyncing questions to Google Sheets...")
+            sync_result = sync_questions_to_sheets()
+            if sync_result.get('success'):
+                print(f"Successfully synced {sync_result.get('count')} questions to Google Sheets")
+            else:
+                print(f"Error syncing questions: {sync_result.get('error')}")
+    else:
+        print("\n❌ SOME TESTS FAILED - Please check the errors above")
+
+if __name__ == "__main__":
+    run_all_tests()
+```
+
+### 6. Update Your Models
+
+Ensure your `Question` model includes an `order` field to track question numbering:
+
+```python
+# In your models.py file
+class Question(models.Model):
+    # Existing fields
+    stage = models.ForeignKey('QuestionStage', on_delete=models.CASCADE, related_name='questions')
+    question_text = models.TextField()
+    question_type = models.CharField(max_length=20, choices=QUESTION_TYPES)
+    is_required = models.BooleanField(default=True)
+    
+    # Add this new field for ordering
+    order = models.IntegerField(default=0)  # Field to manage question order
+    
+    class Meta:
+        ordering = ['stage', 'order']  # Order by stage first, then by order field
+```
+
+### 7. Add Admin Interface Enhancement
+
+Update your admin.py file to include question ordering and Google Sheets sync:
+
+```python
+# In your admin.py file
+from django.contrib import admin
+from django.urls import path
+from django.http import JsonResponse
+from django.shortcuts import render
+from .models import Question, QuestionStage, Answer
+from utils.google_sheets import sync_questions_to_sheets
+
+class QuestionAdmin(admin.ModelAdmin):
+    list_display = ('order', 'question_text', 'stage', 'question_type', 'is_required')
+    list_filter = ('stage', 'question_type', 'is_required')
+    search_fields = ('question_text',)
+    list_editable = ('order',)  # Allow editing order directly in the list view
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('sync-to-sheets/', self.admin_site.admin_view(self.sync_to_sheets), name='recruitment_question_sync_to_sheets'),
+        ]
+        return custom_urls + urls
+    
+    def sync_to_sheets(self, request):
+        """Sync all questions to Google Sheets"""
+        result = sync_questions_to_sheets()
+        
+        if result['success']:
+            self.message_user(request, f"Successfully synced {result['count']} questions to Google Sheets")
+        else:
+            self.message_user(request, f"Error: {result['error']}", level='ERROR')
+        
+        return JsonResponse({'status': 'complete'})
+
+admin.site.register(Question, QuestionAdmin)
+```
+
+### 8. Integrate with your Form Submission Views
+
+Modify your view that handles form submissions to save answers to Google Sheets:
+
+```python
+# In your views.py file
+from utils.google_sheets import save_answer_to_sheets
+
+def submit_answer(request):
+    # Your existing code that processes the form submission
+    
+    # After saving the answer to your database:
+    user_id = request.user.id
+    question_id = form.cleaned_data.get('question_id')
+    answer_text = form.cleaned_data.get('answer')
+    
+    # Save to Google Sheets
+    result = save_answer_to_sheets(user_id, question_id, answer_text)
+    
+    if not result['success']:
+        logger.error(f"Failed to save answer to Google Sheets: {result.get('error')}")
+    
+    # Continue with your existing view logic
+```
+
+### 9. Testing the Integration
+
+1. Run the connection test script from the Replit shell:
+   ```
+   python test_sheets_connection.py
+   ```
+
+2. If tests pass, go to your admin interface and try synchronizing questions:
+   - Navigate to the Questions admin page
+   - Use the "Sync to Google Sheets" action
+
+3. Verify data appears in your Google Sheet by visiting:
+   https://docs.google.com/spreadsheets/d/1SwVg13wGY8-yBxv3uzTiaeJ0pAhEPEgRBp_wRdOwluk/edit
+
+## Troubleshooting
+
+If you encounter issues:
+
+1. **Credentials Problems**
+   - Ensure the `credentials.json` file contains valid service account information
+   - Verify the service account has edit access to the spreadsheet
+   - Check that the spreadsheet ID matches exactly
+
+2. **Connection Errors**
+   - Run the test script for detailed error messages
+   - Check Replit's console logs for API errors
+   - Verify that your Replit project has internet access
+
+3. **Data Not Appearing**
+   - Ensure the sync function is being called correctly
+   - Check for errors in the console logs
+   - Verify sheet names match what's expected ("Questions" and "Answers")
+
+4. **Permission Issues**
+   - Make sure the spreadsheet is shared with the service account email
+   - The service account needs editor permissions
+
+This implementation will ensure all your recruitment questions are properly numbered and synchronized with Google Sheets, and all applicant responses are recorded with their corresponding question numbers.

@@ -1,0 +1,82 @@
+"""
+Script to create credentials.json file from service account information
+"""
+
+import os
+import json
+import sys
+from pathlib import Path
+
+def create_credentials_file():
+    """
+    Creates a credentials.json file with the service account details
+    """
+    print("Creating credentials.json file for Google Sheets API...")
+    
+    # Service account email - corected to match the actual email
+    service_account_email = "deliverydriver-service-270@translate-457112.iam.gserviceaccount.com"
+    
+    # Check if existing env variables contain a credentials JSON
+    google_creds = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    
+    if google_creds:
+        try:
+            # If GOOGLE_APPLICATION_CREDENTIALS exists as JSON
+            creds_json = json.loads(google_creds)
+            print("Found credentials in GOOGLE_APPLICATION_CREDENTIALS environment variable")
+        except:
+            # Not JSON, might be a file path
+            if os.path.exists(google_creds):
+                try:
+                    with open(google_creds, 'r') as f:
+                        creds_json = json.load(f)
+                    print(f"Loaded credentials from file: {google_creds}")
+                except:
+                    creds_json = None
+            else:
+                creds_json = None
+    else:
+        creds_json = None
+    
+    if not creds_json:
+        # Create a basic credentials structure
+        # Note: This is not a complete service account JSON - user will need to fill in details
+        creds_json = {
+            "type": "service_account",
+            "project_id": "translate-457112",
+            "private_key_id": "",  # User needs to fill this in
+            "private_key": "",     # User needs to fill this in
+            "client_email": service_account_email,
+            "client_id": "",       # User needs to fill this in
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{service_account_email.replace('@', '%40')}"
+        }
+        print("Created template credentials structure - you will need to fill in private key details")
+    
+    # Get the project root directory
+    BASE_DIR = Path(__file__).resolve().parent
+    
+    # Save the credentials file
+    creds_path = os.path.join(BASE_DIR, 'credentials.json')
+    
+    with open(creds_path, 'w') as f:
+        json.dump(creds_json, f, indent=2)
+    
+    print(f"Credentials file created at: {creds_path}")
+    print("IMPORTANT: Make sure this file contains the correct private key information!")
+    print("The Google Sheet must be shared with:", service_account_email)
+    
+    # Set permissions if on Unix-like system
+    if sys.platform != 'win32':
+        try:
+            os.chmod(creds_path, 0o600)  # Read/write for owner only
+            print("Set file permissions to 600 (read/write for owner only)")
+        except:
+            print("Could not set file permissions")
+    
+    return creds_path
+
+if __name__ == "__main__":
+    create_credentials_file()

@@ -36,3 +36,7 @@ run = ["sh", "-c", "python manage.py runserver 0.0.0.0:5000"]
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[env]
+GOOGLE_SHEETS_ENABLED = "True"
+GOOGLE_SHEETS_ID = "1SwVg13wGY8-yBxv3uzTiaeJ0pAhEPEgRBp_wRdOwluk"

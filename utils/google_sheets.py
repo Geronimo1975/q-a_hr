@@ -272,9 +272,9 @@ def sync_questions_to_sheets():
         if not sheets:
             return {"success": False, "error": "Could not initialize Google Sheets service"}
         
-        sheet_id = settings.GOOGLE_SHEETS.get('spreadsheet_id')
+        sheet_id = os.environ.get('GOOGLE_SHEETS_ID')
         if not sheet_id:
-            return {"success": False, "error": "No spreadsheet ID configured in settings"}
+            return {"success": False, "error": "No spreadsheet ID configured in environment variables"}
         
         # Prepare data - Headers first
         data = [["Nr.", "Question", "Question Type", "Stage", "Required"]]

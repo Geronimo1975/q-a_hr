@@ -1,0 +1,283 @@
+"""
+Google Sheets integration utilities for DeliveryDriverPortal
+"""
+
+import os
+import json
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from django.conf import settings
+import logging
+
+logger = logging.getLogger(__name__)
+
+def get_sheets_service():
+    """
+    Creates and returns a Google Sheets service object
+    """
+    try:
+        # Check if environment variables are set
+        sheets_enabled = os.environ.get('GOOGLE_SHEETS_ENABLED')
+        sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+        
+        if not sheets_enabled or sheets_enabled.lower() != 'true':
+            logger.warning("Google Sheets integration is disabled (GOOGLE_SHEETS_ENABLED != True)")
+            return None
+            
+        if not sheets_id:
+            logger.error("Google Sheets ID is not set (GOOGLE_SHEETS_ID)")
+            return None
+        
+        # Get credentials from file
+        creds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'credentials.json')
+        
+        if not os.path.exists(creds_path):
+            logger.error(f"Credentials file not found at {creds_path}")
+            return None
+        
+        creds = Credentials.from_service_account_file(
+            creds_path,
+            scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
+        
+        # Build and return the service
+        service = build('sheets', 'v4', credentials=creds)
+        return service.spreadsheets()
+        
+    except Exception as e:
+        logger.error(f"Error creating Google Sheets service: {str(e)}")
+        return None
+
+def test_connection():
+    """
+    Tests the connection to Google Sheets
+    """
+    try:
+        sheets = get_sheets_service()
+        if not sheets:
+            return {"success": False, "error": "Could not initialize Sheets service"}
+        
+        sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+        
+        # Try to get spreadsheet info
+        response = sheets.get(spreadsheetId=sheets_id).execute()
+        
+        # If we get here, connection is successful
+        return {
+            "success": True, 
+            "spreadsheet_title": response.get('properties', {}).get('title', 'Unknown'),
+            "sheets": [sheet.get('properties', {}).get('title', 'Unknown') for sheet in response.get('sheets', [])]
+        }
+        
+    except HttpError as e:
+        return {"success": False, "error": f"Google API error: {str(e)}"}
+    except Exception as e:
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
+def create_or_find_sheet(sheet_name):
+    """
+    Ensures a sheet with the given name exists in the spreadsheet
+    """
+    try:
+        sheets = get_sheets_service()
+        if not sheets:
+            return {"success": False, "error": "Could not initialize Sheets service"}
+        
+        sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+        
+        # Check if sheet exists
+        response = sheets.get(spreadsheetId=sheets_id).execute()
+        sheet_exists = False
+        
+        for sheet in response.get('sheets', []):
+            if sheet.get('properties', {}).get('title') == sheet_name:
+                sheet_exists = True
+                break
+        
+        # If sheet doesn't exist, create it
+        if not sheet_exists:
+            request = {
+                'addSheet': {
+                    'properties': {
+                        'title': sheet_name
+                    }
+                }
+            }
+            
+            sheets.batchUpdate(
+                spreadsheetId=sheets_id,
+                body={'requests': [request]}
+            ).execute()
+            
+            return {"success": True, "message": f"Sheet '{sheet_name}' created successfully"}
+        
+        return {"success": True, "message": f"Sheet '{sheet_name}' already exists"}
+        
+    except HttpError as e:
+        return {"success": False, "error": f"Google API error: {str(e)}"}
+    except Exception as e:
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
+def sync_questions_to_sheets():
+    """
+    Syncs all questions to the Questions sheet in Google Sheets
+    """
+    try:
+        # Import here to avoid circular imports
+        from recruitment.models import Question, QuestionStage
+        
+        sheets = get_sheets_service()
+        if not sheets:
+            return {"success": False, "error": "Could not initialize Sheets service"}
+        
+        sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+        
+        # Ensure Questions sheet exists
+        create_result = create_or_find_sheet("Questions")
+        if not create_result["success"]:
+            return create_result
+        
+        # Prepare data with headers
+        data = [
+            ["Nr.", "Question Text", "Question Type", "Stage", "Required"]
+        ]
+        
+        # Get all questions ordered by stage and then by order
+        questions = Question.objects.all().order_by('stage', 'order')
+        
+        # Add questions to data
+        for i, question in enumerate(questions, 1):
+            data.append([
+                i,  # Sequential number
+                question.question_text,
+                question.get_question_type_display(),
+                question.stage.name,
+                "Yes" if question.is_required else "No"
+            ])
+        
+        # Clear existing data and update
+        sheets.values().clear(
+            spreadsheetId=sheets_id,
+            range="Questions!A1:Z1000"  # Clear a large range to ensure all old data is removed
+        ).execute()
+        
+        sheets.values().update(
+            spreadsheetId=sheets_id,
+            range="Questions!A1",
+            valueInputOption="RAW",
+            body={"values": data}
+        ).execute()
+        
+        return {"success": True, "count": len(questions)}
+        
+    except Exception as e:
+        logger.error(f"Error syncing questions to sheets: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+def save_answer_to_sheets(user_id, question_id, answer_text):
+    """
+    Saves a user's answer to a question to Google Sheets
+    """
+    try:
+        # Import here to avoid circular imports
+        from recruitment.models import Question, Answer
+        from django.utils import timezone
+        
+        sheets = get_sheets_service()
+        if not sheets:
+            return {"success": False, "error": "Could not initialize Sheets service"}
+        
+        sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+        
+        # Ensure Answers sheet exists
+        create_result = create_or_find_sheet("Answers")
+        if not create_result["success"]:
+            return create_result
+        
+        # Get question details
+        question = Question.objects.get(id=question_id)
+        
+        # Prepare row data
+        row_data = [
+            [
+                str(timezone.now()),  # Timestamp
+                str(user_id),  # User ID
+                question.order,  # Question number/order
+                question.question_text,  # Question text
+                str(answer_text)  # Answer
+            ]
+        ]
+        
+        # Append to sheet
+        sheets.values().append(
+            spreadsheetId=sheets_id,
+            range="Answers!A1",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": row_data}
+        ).execute()
+        
+        return {"success": True}
+        
+    except Exception as e:
+        logger.error(f"Error saving answer to sheets: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+def get_command_line_test():
+    """
+    Returns a command line Python snippet for testing the Google Sheets connection
+    Useful for debugging in Replit console
+    """
+    return """
+import os
+import json
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+
+# Check environment variables
+sheets_enabled = os.environ.get('GOOGLE_SHEETS_ENABLED')
+sheets_id = os.environ.get('GOOGLE_SHEETS_ID')
+
+print(f"GOOGLE_SHEETS_ENABLED: {sheets_enabled}")
+print(f"GOOGLE_SHEETS_ID: {sheets_id}")
+
+# Get credentials path
+import os
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+creds_path = os.path.join(base_dir, 'credentials.json')
+print(f"Looking for credentials at: {creds_path}")
+print(f"File exists: {os.path.exists(creds_path)}")
+
+# Try to load credentials
+try:
+    creds = Credentials.from_service_account_file(
+        creds_path,
+        scopes=['https://www.googleapis.com/auth/spreadsheets']
+    )
+    print("Credentials loaded successfully")
+    
+    # Build the service
+    service = build('sheets', 'v4', credentials=creds)
+    sheets = service.spreadsheets()
+    
+    # Try to get spreadsheet info
+    response = sheets.get(spreadsheetId=sheets_id).execute()
+    print(f"Spreadsheet title: {response.get('properties', {}).get('title')}")
+    print(f"Sheets: {[sheet.get('properties', {}).get('title') for sheet in response.get('sheets', [])]}")
+    
+    # Try to write a test cell
+    test_data = [["Test connection at", str(import datetime; datetime.datetime.now())]]
+    result = sheets.values().update(
+        spreadsheetId=sheets_id,
+        range="Sheet1!A1",
+        valueInputOption="RAW",
+        body={"values": test_data}
+    ).execute()
+    print(f"Write result: {result}")
+    
+    print("Google Sheets connection test SUCCESSFUL")
+    
+except Exception as e:
+    print(f"ERROR: {str(e)}")
+"""
