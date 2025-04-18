@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %} - Profile{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">Your Profile</h4>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form|crispy }}
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary" type="submit">Update Profile</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header bg-info text-white">
+                <h4 class="mb-0">Application Status</h4>
+            </div>
+            <div class="card-body">
+                <p><strong>Current Status:</strong> {{ user.get_stage_status }}</p>
+                <div class="progress mb-3">
+                    {% if user.is_rejected %}
+                        <div class="progress-bar bg-danger" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">Application Rejected</div>
+                    {% else %}
+                        {% if user.application_stage == 0 %}
+                            <div class="progress-bar" role="progressbar" style="width: 25%;" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">Registration</div>
+                        {% elif user.application_stage == 1 %}
+                            <div class="progress-bar" role="progressbar" style="width: 50%;" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">Stage 1 Complete</div>
+                        {% elif user.application_stage == 2 %}
+                            <div class="progress-bar" role="progressbar" style="width: 75%;" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100">Stage 2 Complete</div>
+                        {% elif user.application_stage == 3 %}
+                            <div class="progress-bar bg-success" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">Application Complete</div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                
+                {% if not user.is_rejected and user.application_stage < 3 %}
+                    <p>
+                        <a href="{% url 'dashboard' %}" class="btn btn-primary">
+                            Continue Application
+                        </a>
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

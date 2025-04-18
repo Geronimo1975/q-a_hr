@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %} - {{ stage_name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">{{ stage_name }}</h4>
+            </div>
+            <div class="card-body">
+                <div class="progress mb-4">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: {{ stage|mul:33 }}%;" aria-valuenow="{{ stage|mul:33 }}" aria-valuemin="0" aria-valuemax="100">Stage {{ stage }}</div>
+                </div>
+                
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form|crispy }}
+                    
+                    <div class="d-grid gap-2 mt-4">
+                        <button class="btn btn-primary" type="submit">Submit and Continue</button>
+                        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Save and Continue Later</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-save functionality for form (optional)
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.querySelector('form');
+        
+        // Add event listener to save form data periodically
+        const formElements = form.querySelectorAll('input, select, textarea');
+        formElements.forEach(element => {
+            element.addEventListener('change', function() {
+                // Could implement auto-save functionality here
+                console.log('Form data changed, could auto-save here');
+            });
+        });
+    });
+</script>
+{% endblock %}

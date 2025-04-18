@@ -1,0 +1,51 @@
+/* Custom CSS */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+footer {
+    margin-top: auto;
+}
+
+.card {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border: none;
+}
+
+.card-header {
+    font-weight: bold;
+}
+
+/* Progress bar customization */
+.progress {
+    height: 25px;
+    font-size: 0.9rem;
+    font-weight: bold;
+}
+
+/* Form customization */
+form .asteriskField {
+    color: red;
+    margin-left: 3px;
+}
+
+.form-check-input {
+    margin-top: 0.3rem;
+}
+
+/* Dashboard customization */
+.accordion-button:not(.collapsed) {
+    background-color: rgba(13, 110, 253, 0.1);
+    color: #0d6efd;
+}
+
+/* GDPR consent styling */
+#div_id_gdpr_consent .form-text {
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background-color: #f8f9fa;
+    border-left: 3px solid #6c757d;
+}

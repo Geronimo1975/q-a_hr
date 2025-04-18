@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %} - Application Complete{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto text-center">
+        <div class="card">
+            <div class="card-body">
+                <i class="fas fa-check-circle text-success mb-4" style="font-size: 5rem;"></i>
+                <h2 class="mb-3">Application Complete!</h2>
+                <p class="lead">Thank you for completing your application for the delivery driver position.</p>
+                <hr>
+                <p>Our team will review your information and contact you soon with the next steps.</p>
+                <p>In the meantime, you can track your application status in your dashboard.</p>
+                <a href="{% url 'dashboard' %}" class="btn btn-primary mt-3">Go to Dashboard</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

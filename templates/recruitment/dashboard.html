@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+
+{% block title %} - Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-10 mx-auto">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">Application Dashboard</h4>
+            </div>
+            <div class="card-body">
+                <h5>Welcome, {{ user.get_full_name }}!</h5>
+                <p>Application Status: <strong>{{ user.get_stage_status }}</strong></p>
+                
+                <div class="progress mb-4">
+                    {% if user.is_rejected %}
+                        <div class="progress-bar bg-danger" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">Application Rejected</div>
+                    {% else %}
+                        {% if user.application_stage == 0 %}
+                            <div class="progress-bar" role="progressbar" style="width: 25%;" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">Registration</div>
+                        {% elif user.application_stage == 1 %}
+                            <div class="progress-bar" role="progressbar" style="width: 50%;" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">Stage 1 Complete</div>
+                        {% elif user.application_stage == 2 %}
+                            <div class="progress-bar" role="progressbar" style="width: 75%;" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100">Stage 2 Complete</div>
+                        {% elif user.application_stage == 3 %}
+                            <div class="progress-bar bg-success" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">Application Complete</div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                
+                {% if user.is_rejected %}
+                    <div class="alert alert-danger">
+                        <h5>Your application has been rejected</h5>
+                        <p>Thank you for your interest in our delivery driver position. Unfortunately, your application will not proceed further.</p>
+                        <p>If you have any questions, please contact our recruitment team.</p>
+                    </div>
+                {% elif user.application_stage == 3 %}
+                    <div class="alert alert-success">
+                        <h5>Application Complete!</h5>
+                        <p>You have successfully completed all stages of your application. Our team will review your information and contact you soon.</p>
+                    </div>
+                {% else %}
+                    {% if next_stage %}
+                        <div class="alert alert-info">
+                            <h5>Next Step: {{ next_stage_name }}</h5>
+                            <p>Please complete the next stage of your application process.</p>
+                            <a href="{% url 'questionnaire' next_stage %}" class="btn btn-primary">
+                                Continue to {{ next_stage_name }}
+                            </a>
+                        </div>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+        
+        {% if answers %}
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h4 class="mb-0">Your Application Responses</h4>
+                </div>
+                <div class="card-body">
+                    <div class="accordion" id="answersAccordion">
+                        {% for stage_num in "123"|make_list %}
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="heading{{ stage_num }}">
+                                    <button class="accordion-button {% if stage_num|add:'0' > user.application_stage %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ stage_num }}" aria-expanded="{% if stage_num|add:'0' <= user.application_stage %}true{% else %}false{% endif %}" aria-controls="collapse{{ stage_num }}">
+                                        Stage {{ stage_num }} Responses
+                                    </button>
+                                </h2>
+                                <div id="collapse{{ stage_num }}" class="accordion-collapse collapse {% if stage_num|add:'0' <= user.application_stage %}show{% endif %}" aria-labelledby="heading{{ stage_num }}" data-bs-parent="#answersAccordion">
+                                    <div class="accordion-body">
+                                        {% if answers %}
+                                            <div class="table-responsive">
+                                                <table class="table table-striped">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Question</th>
+                                                            <th>Your Answer</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for answer in answers %}
+                                                            {% if answer.question.stage.stage_number|stringformat:"s" == stage_num %}
+                                                                <tr>
+                                                                    <td>{{ answer.question.question_text }}</td>
+                                                                    <td>{{ answer.answer_text }}</td>
+                                                                </tr>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        {% else %}
+                                            <p>No responses for this stage yet.</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

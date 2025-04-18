@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block title %} - Welcome{% endblock %}
+
+{% block content %}
+<div class="row mb-5">
+    <div class="col-md-8 mx-auto text-center">
+        <h1 class="display-4 mb-4">Become a Delivery Driver</h1>
+        <p class="lead">
+            Join our team of professional drivers and enjoy flexible hours, competitive pay, and a supportive work environment.
+        </p>
+        {% if not user.is_authenticated %}
+            <div class="mt-4">
+                <a href="{% url 'account_signup' %}" class="btn btn-primary btn-lg">Apply Now</a>
+                <a href="{% url 'account_login' %}" class="btn btn-outline-secondary btn-lg ms-2">Existing Applicant? Log In</a>
+            </div>
+        {% else %}
+            <div class="mt-4">
+                <a href="{% url 'dashboard' %}" class="btn btn-primary btn-lg">Continue Your Application</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-body text-center">
+                <i class="fas fa-clock fa-3x mb-3 text-primary"></i>
+                <h5 class="card-title">Flexible Hours</h5>
+                <p class="card-text">Choose shifts that fit your schedule, including part-time and full-time opportunities.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-body text-center">
+                <i class="fas fa-euro-sign fa-3x mb-3 text-primary"></i>
+                <h5 class="card-title">Competitive Pay</h5>
+                <p class="card-text">Earn a competitive base rate plus incentives, with weekly pay options.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-body text-center">
+                <i class="fas fa-car fa-3x mb-3 text-primary"></i>
+                <h5 class="card-title">Vehicle Options</h5>
+                <p class="card-text">Drive your own vehicle or use one of our company vehicles for deliveries.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <h3>Application Process</h3>
+        <ol class="list-group list-group-numbered mb-4">
+            <li class="list-group-item d-flex justify-content-between align-items-start">
+                <div class="ms-2 me-auto">
+                    <div class="fw-bold">Create an Account</div>
+                    Register with your personal details and contact information
+                </div>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-start">
+                <div class="ms-2 me-auto">
+                    <div class="fw-bold">Stage 1: Basic Qualifications</div>
+                    Complete questions about your driving experience and availability
+                </div>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-start">
+                <div class="ms-2 me-auto">
+                    <div class="fw-bold">Stage 2: Detailed Assessment</div>
+                    Answer more specific questions about your skills and background
+                </div>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-start">
+                <div class="ms-2 me-auto">
+                    <div class="fw-bold">Stage 3: Final Qualification</div>
+                    Complete the final set of questions for your application
+                </div>
+            </li>
+        </ol>
+    </div>
+
+    <div class="col-md-6">
+        <h3>Requirements</h3>
+        <ul class="list-group mb-4">
+            <li class="list-group-item"><i class="fas fa-check-circle text-success me-2"></i> Valid driver's license</li>
+            <li class="list-group-item"><i class="fas fa-check-circle text-success me-2"></i> At least 21 years of age</li>
+            <li class="list-group-item"><i class="fas fa-check-circle text-success me-2"></i> Clean driving record</li>
+            <li class="list-group-item"><i class="fas fa-check-circle text-success me-2"></i> Reliable transportation</li>
+            <li class="list-group-item"><i class="fas fa-check-circle text-success me-2"></i> Smartphone with data plan</li>
+            <li class="list-group-item"><i class="fas fa-check-circle text-success me-2"></i> Ability to lift up to 25kg</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
