@@ -1,7 +1,7 @@
 from django import template
 from django.utils.safestring import mark_safe
 from django.utils.translation import get_language
-from utils.translation import translate_text
+from utils.translate_api import translate_text
 
 register = template.Library()
 

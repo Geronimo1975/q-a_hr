@@ -1,10 +1,14 @@
 import os
+import html
 from google.cloud import translate_v2 as translate
 from django.conf import settings
 from django.utils.translation import get_language
 
+# Set the API key environment variable explicitly
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = os.environ.get('GOOGLE_TRANSLATE_API_KEY', '')
+
 # Initialize the Google Translate client
-translate_client = translate.Client(key=os.environ.get('GOOGLE_TRANSLATE_API_KEY'))
+translate_client = translate.Client()
 
 def translate_text(text, target_language=None, source_language=None):
     """
