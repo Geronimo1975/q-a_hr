@@ -86,23 +86,30 @@ class ChatbotService:
         """
         Send a user message and get the AI response
         """
+        print(f"ChatbotService.send_message called with session_id: {session.session_id}, message: '{message_text}'")
+        
         # Store the user message
         ChatMessage.objects.create(
             session=session,
             role="user",
             content=message_text
         )
+        print("User message stored in database")
         
         # Extract any applicant information from the message
         self.extract_applicant_info(session, message_text)
         
         # Get context from relevant documents
         document_context = ""
+        print("Querying document processor for relevant documents...")
         relevant_docs = self.document_processor.query_documents(message_text, k=2)
         if relevant_docs:
+            print(f"Found {len(relevant_docs)} relevant documents")
             document_context = "Information from relevant documents:\n"
             for doc in relevant_docs:
                 document_context += f"- {doc['content']}\n\n"
+        else:
+            print("No relevant documents found")
         
         # Build message history for the API call
         messages = []
@@ -110,11 +117,15 @@ class ChatbotService:
         # Add system message
         system_message = ChatMessage.objects.filter(session=session, role="system").first()
         if system_message:
+            print(f"Adding system message: '{system_message.content[:50]}...'")
             messages.append({"role": "system", "content": system_message.content})
             
             # If we have document context, append it to the system message
             if document_context:
+                print("Adding document context to system message")
                 messages[0]["content"] += f"\n\n{document_context}"
+        else:
+            print("No system message found for this session")
         
         # Add conversation history (last 10 messages)
         history = ChatMessage.objects.filter(
@@ -122,15 +133,23 @@ class ChatbotService:
             role__in=["user", "assistant"]
         ).order_by('timestamp')
         
+        print(f"Found {history.count()} messages in conversation history")
+        
         # Skip the most recent user message (we'll add it separately)
-        for msg in history[:-1]:
+        for i, msg in enumerate(history[:-1]):
+            print(f"Adding message {i+1} from history: {msg.role} - '{msg.content[:30]}...'")
             messages.append({"role": msg.role, "content": msg.content})
         
         # Add the current user message
+        print(f"Adding current user message: '{message_text}'")
         messages.append({"role": "user", "content": message_text})
+        
+        print(f"Prepared {len(messages)} messages for OpenAI API call")
+        print(f"Using model: {self.model}")
         
         try:
             # Call the OpenAI API
+            print("Calling OpenAI API...")
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
@@ -140,6 +159,7 @@ class ChatbotService:
             
             # Extract the assistant's message
             assistant_message = response.choices[0].message.content
+            print(f"Received response from OpenAI: '{assistant_message[:50]}...'")
             
             # Store the assistant message
             ChatMessage.objects.create(
@@ -147,11 +167,15 @@ class ChatbotService:
                 role="assistant",
                 content=assistant_message
             )
+            print("Assistant message stored in database")
             
             return assistant_message
             
         except Exception as e:
             print(f"Error calling OpenAI API: {e}")
+            import traceback
+            traceback.print_exc()
+            
             # Store error message
             error_msg = f"I'm sorry, I encountered an error: {str(e)}"
             ChatMessage.objects.create(

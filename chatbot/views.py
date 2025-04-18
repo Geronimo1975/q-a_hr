@@ -38,24 +38,35 @@ def send_message_api(request):
             message = data.get('message', '')
             session_id = data.get('session_id', '')
             
+            print(f"Received message: '{message}', session_id: '{session_id}'")
+            
             if not message or not session_id:
+                print("Error: Message or session_id is missing")
                 return JsonResponse({'success': False, 'error': 'Message and session_id are required'})
             
             # Get the session
             try:
                 session = ChatSession.objects.get(session_id=session_id)
+                print(f"Found session: {session.id}")
             except ChatSession.DoesNotExist:
+                print(f"Error: Session with ID {session_id} not found")
                 return JsonResponse({'success': False, 'error': 'Invalid session'})
             
             # Initialize service and send message
             service = ChatbotService()
+            print("Sending message to ChatbotService...")
             response = service.send_message(session, message)
+            print(f"Received response: '{response}'")
             
             return JsonResponse({'success': True, 'response': response})
             
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error: {e}")
             return JsonResponse({'success': False, 'error': 'Invalid JSON'})
         except Exception as e:
+            print(f"Unexpected error in send_message_api: {e}")
+            import traceback
+            traceback.print_exc()
             return JsonResponse({'success': False, 'error': str(e)})
     
     return JsonResponse({'success': False, 'error': 'Only POST requests are allowed'})

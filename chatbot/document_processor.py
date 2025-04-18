@@ -1,9 +1,9 @@
 import os
 import re
 import PyPDF2
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter  # Updated import
 from langchain_openai import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from django.conf import settings
 
 class DocumentProcessor:
