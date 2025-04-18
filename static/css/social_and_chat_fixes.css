@@ -1,0 +1,80 @@
+/* CSS for removing chat popup and adding social media icons */
+
+/* 1. Fix for the "how can I help" popup */
+.chat-launcher .chat-popup,
+.chat-with-us .popup-text,
+.chat-bubble {
+    display: none !important; /* Force hide the popup regardless of other styles */
+}
+
+.chat-launcher {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: #007bff; /* Blue color from header */
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    border: none;
+    z-index: 1000;
+    transition: transform 0.3s ease;
+}
+
+.chat-launcher:hover {
+    transform: scale(1.05);
+}
+
+.chat-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+/* 2. Social media icons in header */
+.social-media-bar {
+    display: flex;
+    align-items: center;
+    gap: 15px; /* Space between icons */
+    margin-left: auto; /* Push icons to the right */
+    padding: 0 15px;
+}
+
+.social-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: #007bff; /* Blue color for icons */
+    background-color: white;
+    transition: all 0.2s ease;
+}
+
+.social-icon:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.social-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* For responsive header */
+@media (max-width: 768px) {
+    .social-media-bar {
+        position: absolute;
+        top: 70px;
+        right: 20px;
+        background-color: white;
+        border-radius: 30px;
+        padding: 5px 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+}

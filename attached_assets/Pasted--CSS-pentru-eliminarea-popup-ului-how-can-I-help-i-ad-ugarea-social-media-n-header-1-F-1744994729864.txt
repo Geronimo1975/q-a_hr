@@ -1,0 +1,141 @@
+/* CSS pentru eliminarea popup-ului "how can I help" și adăugarea social media în header */
+
+/* 1. Fix pentru popup-ul "how can I help" */
+.chat-launcher .chat-popup,
+.chat-with-us .popup-text,
+.chat-bubble {
+    display: none !important; /* Forțează ascunderea popup-ului indiferent de alte stiluri */
+}
+
+.chat-launcher {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: #007bff; /* Culoarea albastră din header */
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    border: none;
+    z-index: 1000;
+    transition: transform 0.3s ease;
+}
+
+.chat-launcher:hover {
+    transform: scale(1.05);
+}
+
+.chat-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+/* 2. Adăugare social media icons în header */
+.social-media-bar {
+    display: flex;
+    align-items: center;
+    gap: 15px; /* Spațiu între iconițe */
+    margin-left: auto; /* Împinge iconițele spre dreapta */
+    padding: 0 15px;
+}
+
+.social-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: #007bff; /* Culoarea albastră pentru iconițe */
+    background-color: white;
+    transition: all 0.2s ease;
+}
+
+.social-icon:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.social-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Pentru header-ul responsive */
+@media (max-width: 768px) {
+    .social-media-bar {
+        position: absolute;
+        top: 70px;
+        right: 20px;
+        background-color: white;
+        border-radius: 30px;
+        padding: 5px 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+}
+
+/* HTML pentru adăugarea social media în header */
+<!-- Adaugă acest cod în header, înainte de închiderea tag-ului div al header-ului -->
+<div class="social-media-bar">
+    <a href="https://wa.me/1234567890" target="_blank" class="social-icon" title="WhatsApp">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+        </svg>
+    </a>
+    <a href="https://t.me/username" target="_blank" class="social-icon" title="Telegram">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.198 2.433a2.242 2.242 0 0 0-1.022.215l-16.5 7.5a2.25 2.25 0 0 0 .126 4.073l3.9 1.205 2.25 6.54c.185.415.594.695 1.048.695a1.35 1.35 0 0 0 1.347-1.3l.885-9.345 5.8 4.2a2.25 2.25 0 0 0 3.28-2.033l-1.095-11.25a2.25 2.25 0 0 0-1.92-2z"></path>
+        </svg>
+    </a>
+    <a href="https://facebook.com/page" target="_blank" class="social-icon" title="Facebook">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>
+        </svg>
+    </a>
+    <a href="https://instagram.com/profile" target="_blank" class="social-icon" title="Instagram">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+        </svg>
+    </a>
+    <a href="https://tiktok.com/@username" target="_blank" class="social-icon" title="TikTok">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 12a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"></path>
+            <path d="M15 8a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path>
+            <path d="M15 8v8a4 4 0 0 1-4 4"></path>
+            <line x1="15" y1="2" x2="15" y2="6"></line>
+        </svg>
+    </a>
+</div>
+
+/* JavaScript pentru a elimina orice popup text rămas și a îmbunătăți comportamentul butonului de chat */
+// Adaugă acest cod în fișierul tău JavaScript
+document.addEventListener('DOMContentLoaded', function() {
+    // Elimină toate popup-urile existente
+    const popups = document.querySelectorAll('.chat-popup, .popup-text, .chat-bubble');
+    popups.forEach(popup => {
+        popup.style.display = 'none';
+        popup.remove(); // Elimină complet elementul
+    });
+    
+    // Îmbunătățește butonul de chat
+    const chatButton = document.querySelector('.chat-launcher');
+    if (chatButton) {
+        // Înlocuiește conținutul butonului cu o iconiță simplă (dacă nu există deja)
+        if (!chatButton.querySelector('.chat-icon')) {
+            chatButton.innerHTML = `
+                <span class="chat-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </span>
+            `;
+        }
+    }
+});
