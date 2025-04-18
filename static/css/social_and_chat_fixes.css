@@ -3,36 +3,10 @@
 /* 1. Fix for the "how can I help" popup */
 .chat-launcher .chat-popup,
 .chat-with-us .popup-text,
-.chat-bubble {
+.chat-bubble,
+.how-can-i-help,
+.chatbot-popup {
     display: none !important; /* Force hide the popup regardless of other styles */
-}
-
-.chat-launcher {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background-color: #007bff; /* Blue color from header */
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-    border: none;
-    z-index: 1000;
-    transition: transform 0.3s ease;
-}
-
-.chat-launcher:hover {
-    transform: scale(1.05);
-}
-
-.chat-icon svg {
-    width: 24px;
-    height: 24px;
 }
 
 /* 2. Social media icons in header */
