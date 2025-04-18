@@ -1,60 +1,38 @@
 import os
 import json
 from datetime import datetime
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from django.conf import settings
 
 def get_credentials():
-    """Obtain and refresh credentials for Google Sheets access."""
-    creds = None
-    token_file = os.path.join(settings.BASE_DIR, 'token.json')
-    credentials_file = os.path.join(settings.BASE_DIR, 'credentials.json')
-    
-    # Token file stores the user's access and refresh tokens
-    if os.path.exists(token_file):
-        try:
-            creds = Credentials.from_authorized_user_info(
-                json.loads(open(token_file).read()),
-                ['https://www.googleapis.com/auth/spreadsheets']
-            )
-        except Exception as e:
-            print(f"Error loading credentials from token file: {e}")
-    
-    # If there are no valid credentials, the user needs to log in
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-            except Exception as e:
-                print(f"Error refreshing credentials: {e}")
-                # If refresh fails, we'll need to authorize again
-                creds = None
+    """Obtain credentials for Google Sheets access using service account."""
+    try:
+        # Check if Google Sheets integration is enabled
+        if not settings.GOOGLE_SHEETS.get('enabled'):
+            print("Google Sheets integration is disabled in settings")
+            return None
+            
+        # Get the path to the credentials file
+        credentials_file = os.path.join(settings.BASE_DIR, 'credentials.json')
         
-        if not creds:
-            try:
-                if os.path.exists(credentials_file):
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        credentials_file,
-                        ['https://www.googleapis.com/auth/spreadsheets']
-                    )
-                    # This will require the user to authorize manually
-                    creds = flow.run_local_server(port=0)
-                    
-                    # Save the credentials for the next run
-                    with open(token_file, 'w') as token:
-                        token.write(creds.to_json())
-                else:
-                    print(f"Credentials file not found: {credentials_file}")
-                    return None
-            except Exception as e:
-                print(f"Error during authorization flow: {e}")
-                return None
-    
-    return creds
+        # Ensure credentials file exists
+        if not os.path.exists(credentials_file):
+            print(f"Credentials file not found: {credentials_file}")
+            return None
+        
+        # Create credentials from service account file
+        creds = Credentials.from_service_account_file(
+            credentials_file,
+            scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
+        
+        return creds
+        
+    except Exception as e:
+        print(f"Error loading service account credentials: {e}")
+        return None
 
 def get_service():
     """Get the Google Sheets service."""
