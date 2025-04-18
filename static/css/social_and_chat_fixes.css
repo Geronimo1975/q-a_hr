@@ -5,7 +5,8 @@
 .chat-with-us .popup-text,
 .chat-bubble,
 .how-can-i-help,
-.chatbot-popup {
+.chatbot-popup,
+.chatbot-tooltip {
     display: none !important; /* Force hide the popup regardless of other styles */
 }
 
