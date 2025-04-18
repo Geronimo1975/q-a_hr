@@ -1,0 +1,45 @@
+# Multi-language Implementation for DeliveryDriverPortal
+
+I need to implement comprehensive multi-language support for my DeliveryDriverPortal application. The primary language should be German, with additional languages available for selection. When a language is chosen, ALL content throughout the website must be displayed in that language.
+
+## Requirements:
+
+1. Default language: German (DE)
+2. Additional languages to support: English (EN), French (FR), Spanish (ES), Italian (IT), Polish (PL), Turkish (TR)
+
+3. ALL content must be translated when language is changed, including:
+   - Navigation menus and UI elements
+   - Main content (homepage, application forms, etc.)
+   - Legal pages (Terms & Conditions, Privacy Policy, Impressum)
+   - Cookies consent banner
+   - Chatbot responses and prompts
+   - Error messages and notifications
+   - Email templates
+
+4. Implement language selection using:
+   - A dropdown in the header
+   - Language preference stored in user session/cookie
+   - Default to browser language detection for first visits
+
+5. Technical implementation:
+   - Use Django's built-in internationalization framework (i18n)
+   - Create translation files for all supported languages
+   - Implement middleware to set language based on user selection
+   - Ensure all templates use translation tags {% trans "..." %}
+   - Special focus on the chatbot to support multi-language responses
+
+6. For the OpenAI chatbot specifically:
+   - Detect user's selected language
+   - Send appropriate system message to instruct the model to respond in the selected language
+   - Translate predefined training examples into all supported languages
+   - Ensure PDF document processing can handle multiple languages
+
+7. Testing requirements:
+   - Test the site with each supported language
+   - Verify all content, including dynamically generated content, appears in the correct language
+   - Ensure chatbot responds in the user's selected language
+   - Test form submissions and emails in different languages
+
+Note: For testing purposes, only the chatbot responses/questions need to be in German or English during development, but the final implementation should support all languages for the chatbot as well.
+
+The language toggle should take effect immediately without requiring a page reload when possible.
