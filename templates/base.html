@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 {% load i18n %}
-<html lang="{{ LANGUAGE_CODE }}" data-bs-theme="light">
+{% get_current_language as CURRENT_LANGUAGE_CODE %}
+<html lang="{{ CURRENT_LANGUAGE_CODE }}" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -54,12 +55,12 @@
                     
                     <!-- Language Selector -->
                     <li class="nav-item dropdown me-3">
+                        {% load i18n %}
+                        {% get_current_language as CURRENT_LANGUAGE_CODE %}
                         <a class="nav-link dropdown-toggle" href="#" id="languageDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-globe"></i> <span class="d-none d-md-inline">{% if LANGUAGE_CODE %}{{ LANGUAGE_CODE|upper }}{% else %}DE{% endif %}</span>
+                            <i class="bi bi-globe"></i> <span class="d-none d-md-inline">{{ CURRENT_LANGUAGE_CODE|upper }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="languageDropdown">
-                            {% load i18n %}
-                            {% get_current_language as LANGUAGE_CODE %}
                             {% get_available_languages as LANGUAGES %}
                             {% get_language_info_list for LANGUAGES as languages %}
                             
@@ -69,7 +70,7 @@
                                         {% csrf_token %}
                                         <input name="next" type="hidden" value="{{ request.get_full_path }}">
                                         <input name="language" type="hidden" value="{{ language.code }}">
-                                        <button type="submit" class="dropdown-item {% if language.code == LANGUAGE_CODE %}active{% endif %}">
+                                        <button type="submit" class="dropdown-item {% if language.code == CURRENT_LANGUAGE_CODE %}active{% endif %}">
                                             {{ language.name_local }}
                                         </button>
                                     </form>
@@ -123,9 +124,9 @@
         <div class="container p-4">
             <div class="row">
                 <div class="col-lg-4 col-md-12 mb-4 mb-md-0" data-aos="fade-up">
-                    <h5 class="text-uppercase fw-bold mb-3">Driver Recruitment</h5>
+                    <h5 class="text-uppercase fw-bold mb-3">{% trans "Driver Recruitment" %}</h5>
                     <p>
-                        Join our team of professional delivery drivers. Complete the application process to start your journey with us.
+                        {% trans "Join our team of professional delivery drivers. Complete the application process to start your journey with us." %}
                     </p>
                     <div class="mt-4">
                         <a href="#" class="me-3 text-reset"><i class="bi bi-facebook fs-4"></i></a>
@@ -135,17 +136,17 @@
                     </div>
                 </div>
                 <div class="col-lg-4 col-md-6 mb-4 mb-md-0" data-aos="fade-up" data-aos-delay="100">
-                    <h5 class="text-uppercase fw-bold mb-3">Quick Links</h5>
+                    <h5 class="text-uppercase fw-bold mb-3">{% trans "Quick Links" %}</h5>
                     <ul class="list-unstyled mb-0">
-                        <li class="mb-2"><a href="{% url 'home' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> Home</a></li>
-                        <li class="mb-2"><a href="{% url 'account_signup' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> Apply Now</a></li>
-                        <li class="mb-2"><a href="{% url 'account_login' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> Login</a></li>
-                        <li class="mb-2"><a href="#" class="text-reset"><i class="bi bi-chevron-right me-1"></i> FAQ</a></li>
+                        <li class="mb-2"><a href="{% url 'home' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {% trans "Home" %}</a></li>
+                        <li class="mb-2"><a href="{% url 'account_signup' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {% trans "Apply Now" %}</a></li>
+                        <li class="mb-2"><a href="{% url 'account_login' %}" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {% trans "Login" %}</a></li>
+                        <li class="mb-2"><a href="#" class="text-reset"><i class="bi bi-chevron-right me-1"></i> {% trans "FAQ" %}</a></li>
                     </ul>
                 </div>
                 <div class="col-lg-4 col-md-6 mb-4 mb-md-0" data-aos="fade-up" data-aos-delay="200">
-                    <h5 class="text-uppercase fw-bold mb-3">Contact</h5>
-                    <p class="mb-1"><i class="bi bi-geo-alt-fill me-2"></i> Hamburg</p>
+                    <h5 class="text-uppercase fw-bold mb-3">{% trans "Contact" %}</h5>
+                    <p class="mb-1"><i class="bi bi-geo-alt-fill me-2"></i> {% trans "Hamburg" %}</p>
                     <p class="mb-1"><i class="bi bi-envelope-fill me-2"></i> fastdelivery@gti-europe.de</p>
                     <p class="mb-1"><i class="bi bi-telephone-fill me-2"></i> +49 162 453 2111</p>
                     <p class="mb-1"><i class="bi bi-clock-fill me-2"></i> 08:00-18:00</p>
@@ -154,10 +155,10 @@
         </div>
         <div class="text-center p-3">
             © 2025 George Sebastian Cucuiet | 
-            <a class="text-reset" href="{% url 'impressum' %}">Impressum</a> | 
-            <a class="text-reset" href="{% url 'privacy_policy' %}">Datenschutzerklärung</a> | 
-            <a class="text-reset" href="{% url 'terms' %}">AGB</a> | 
-            <a class="text-reset" href="{% url 'cookie_policy' %}">Cookie-Richtlinie</a>
+            <a class="text-reset" href="{% url 'impressum' %}">{% trans "Impressum" %}</a> | 
+            <a class="text-reset" href="{% url 'privacy_policy' %}">{% trans "Privacy Policy" %}</a> | 
+            <a class="text-reset" href="{% url 'terms' %}">{% trans "Terms & Conditions" %}</a> | 
+            <a class="text-reset" href="{% url 'cookie_policy' %}">{% trans "Cookie Policy" %}</a>
         </div>
     </footer>
 
@@ -167,14 +168,13 @@
             <div class="row align-items-center">
                 <div class="col-md-8 mb-3 mb-md-0">
                     <p class="mb-0">
-                        Diese Website verwendet Cookies, um Ihnen das beste Erlebnis auf unserer Website zu bieten. 
-                        Durch die weitere Nutzung der Website stimmen Sie der Verwendung von Cookies zu. 
-                        Weitere Informationen finden Sie in unserer <a href="{% url 'cookie_policy' %}" class="text-decoration-underline">Cookie-Richtlinie</a>.
+                        {% trans "This website uses cookies to provide you with the best experience on our website. By continuing to use the website, you agree to the use of cookies. For more information, please see our" %}
+                        <a href="{% url 'cookie_policy' %}" class="text-decoration-underline">{% trans "Cookie Policy" %}</a>.
                     </p>
                 </div>
                 <div class="col-md-4 text-md-end">
-                    <button id="acceptCookies" class="btn btn-primary btn-sm me-2">Akzeptieren</button>
-                    <button id="rejectCookies" class="btn btn-outline-light btn-sm">Ablehnen</button>
+                    <button id="acceptCookies" class="btn btn-primary btn-sm me-2">{% trans "Accept" %}</button>
+                    <button id="rejectCookies" class="btn btn-outline-light btn-sm">{% trans "Decline" %}</button>
                 </div>
             </div>
         </div>
