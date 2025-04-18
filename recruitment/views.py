@@ -8,6 +8,7 @@ from .forms import Stage1QuestionnaireForm, Stage2QuestionnaireForm, Stage3Quest
 from .models import Answer, Question, QuestionStage, ApplicationSource, ApplicantTracking
 from accounts.models import CustomUser
 from utils.google_sheets import update_sheet_with_answers
+from utils.sheets_direct import update_sheet_with_answers as update_sheet_direct
 
 
 @login_required
