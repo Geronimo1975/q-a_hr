@@ -56,7 +56,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
-    'utils.middleware.GoogleTranslationMiddleware',  # Add Google Translation middleware
+    'utils.middleware.TranslationDebugMiddleware',  # Add Translation Debug middleware
 ]
 
 ROOT_URLCONF = 'driver_recruitment.urls'

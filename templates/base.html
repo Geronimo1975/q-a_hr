@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 {% load i18n %}
+{% load translation_tags %}
 {% get_current_language as CURRENT_LANGUAGE_CODE %}
 <html lang="{{ CURRENT_LANGUAGE_CODE }}" data-bs-theme="light">
 <head>
@@ -33,14 +34,14 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'home' %}">{% trans "Home" %}</a>
+                        <a class="nav-link" href="{% url 'home' %}">{{ "Home"|direct_translate }}</a>
                     </li>
                     {% if user.is_authenticated %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'dashboard' %}">{% trans "Dashboard" %}</a>
+                            <a class="nav-link" href="{% url 'dashboard' %}">{{ "Dashboard"|direct_translate }}</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'profile' %}">{% trans "Profile" %}</a>
+                            <a class="nav-link" href="{% url 'profile' %}">{{ "Profile"|direct_translate }}</a>
                         </li>
                     {% endif %}
                 </ul>
