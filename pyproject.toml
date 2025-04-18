@@ -23,4 +23,5 @@ dependencies = [
     "django-channels>=0.7.0",
     "channels-redis>=4.2.1",
     "langchain-community>=0.3.21",
+    "fpdf>=1.7.2",
 ]

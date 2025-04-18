@@ -1,186 +1,221 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Chat with Our Assistant | Delivery Driver Recruitment{% endblock %}
+{% block title %}Delivery Driver Recruitment Chatbot{% endblock %}
 
 {% block extra_css %}
 <style>
     .chat-container {
-        height: 500px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
+        height: 70vh;
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .chat-messages {
+        height: calc(100% - 80px);
+        overflow-y: auto;
+        padding: 20px;
         display: flex;
         flex-direction: column;
     }
     
-    .chat-messages {
-        flex: 1;
-        overflow-y: auto;
-        padding: 15px;
-        background-color: #f8f9fa;
-    }
-    
     .chat-input {
-        display: flex;
-        padding: 10px;
-        border-top: 1px solid #ddd;
-        background-color: #fff;
+        height: 80px;
+        padding: 15px;
+        background-color: white;
+        border-top: 1px solid #dee2e6;
+        border-radius: 0 0 10px 10px;
     }
     
-    .chat-input input {
-        flex: 1;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        margin-right: 10px;
-    }
-    
-    .chat-message {
+    .message {
+        max-width: 75%;
+        border-radius: 10px;
+        padding: 12px 16px;
         margin-bottom: 15px;
-        display: flex;
+        position: relative;
+        font-size: 16px;
     }
     
     .user-message {
-        justify-content: flex-end;
+        background-color: #007bff;
+        color: white;
+        align-self: flex-end;
+        border-bottom-right-radius: 0;
     }
     
     .assistant-message {
-        justify-content: flex-start;
+        background-color: #e9ecef;
+        color: #343a40;
+        align-self: flex-start;
+        border-bottom-left-radius: 0;
     }
     
-    .message-bubble {
-        max-width: 70%;
-        padding: 10px 15px;
-        border-radius: 18px;
-        position: relative;
-    }
-    
-    .user-bubble {
-        background-color: #0084ff;
-        color: white;
-        border-bottom-right-radius: 5px;
-    }
-    
-    .assistant-bubble {
-        background-color: #e5e5ea;
-        color: #000;
-        border-bottom-left-radius: 5px;
+    .system-message {
+        background-color: #f8d7da;
+        color: #721c24;
+        align-self: center;
+        font-size: 14px;
+        text-align: center;
+        max-width: 90%;
     }
     
     .message-time {
-        font-size: 0.7rem;
-        color: #999;
+        font-size: 12px;
+        color: #6c757d;
         margin-top: 5px;
         text-align: right;
     }
     
     .typing-indicator {
         display: none;
-        align-items: center;
+        background-color: #e9ecef;
+        border-radius: 10px;
+        padding: 10px 16px;
         margin-bottom: 15px;
+        align-self: flex-start;
+        color: #6c757d;
     }
     
-    .typing-indicator .dot {
-        height: 8px;
-        width: 8px;
-        margin: 0 1px;
-        background-color: #999;
-        border-radius: 50%;
+    .typing-indicator span {
         display: inline-block;
-        animation: typing 1.5s infinite ease-in-out;
+        margin-right: 5px;
+        width: 8px;
+        height: 8px;
+        background-color: #6c757d;
+        border-radius: 50%;
+        animation: typing 1s infinite ease-in-out;
     }
     
-    .typing-indicator .dot:nth-child(2) {
+    .typing-indicator span:nth-child(2) {
         animation-delay: 0.2s;
     }
     
-    .typing-indicator .dot:nth-child(3) {
+    .typing-indicator span:nth-child(3) {
         animation-delay: 0.4s;
     }
     
     @keyframes typing {
         0% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
+        50% { transform: translateY(-5px); }
         100% { transform: translateY(0); }
+    }
+    
+    .file-upload-container {
+        margin-bottom: 20px;
+        padding: 15px;
+        background-color: #fff;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    
+    .file-upload-heading {
+        margin-bottom: 15px;
+        font-size: 18px;
+        color: #343a40;
+    }
+    
+    .file-upload-info {
+        color: #6c757d;
+        font-size: 14px;
+        margin-bottom: 10px;
+    }
+    
+    #upload-form {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    #file-status {
+        margin-top: 10px;
+        padding: 8px;
+        border-radius: 4px;
+        display: none;
+    }
+    
+    .status-success {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .status-error {
+        background-color: #f8d7da;
+        color: #721c24;
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="card shadow-lg" data-aos="fade-up">
-                <div class="card-header bg-primary text-white">
-                    <h1 class="h3 mb-0">Chat with our Recruitment Assistant</h1>
-                </div>
-                <div class="card-body p-0">
-                    <div class="chat-container">
-                        <div class="chat-messages" id="chatMessages">
-                            {% for message in messages %}
-                                {% if message.role == 'user' %}
-                                    <div class="chat-message user-message">
-                                        <div class="message-bubble user-bubble">
-                                            {{ message.content }}
-                                            <div class="message-time">{{ message.timestamp|date:"g:i A" }}</div>
-                                        </div>
-                                    </div>
-                                {% elif message.role == 'assistant' %}
-                                    <div class="chat-message assistant-message">
-                                        <div class="message-bubble assistant-bubble">
-                                            {{ message.content }}
-                                            <div class="message-time">{{ message.timestamp|date:"g:i A" }}</div>
-                                        </div>
-                                    </div>
-                                {% endif %}
-                            {% empty %}
-                                <div class="chat-message assistant-message">
-                                    <div class="message-bubble assistant-bubble">
-                                        <p>Hello! I'm your delivery driver recruitment assistant. How can I help you today?</p>
-                                        <p>I can answer questions about:</p>
-                                        <ul>
-                                            <li>Application process</li>
-                                            <li>Job requirements</li>
-                                            <li>Pay and benefits</li>
-                                            <li>Scheduling and shifts</li>
-                                            <li>Vehicle requirements</li>
-                                        </ul>
-                                        <p>Feel free to ask me anything!</p>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                            
-                            <div class="chat-message assistant-message typing-indicator" id="typingIndicator">
-                                <div class="message-bubble assistant-bubble">
-                                    <div class="dot"></div>
-                                    <div class="dot"></div>
-                                    <div class="dot"></div>
-                                </div>
+    <h1 class="mb-4">Delivery Driver Recruitment Assistant</h1>
+    <p class="lead mb-4">Chat with our AI assistant to learn more about delivery driver opportunities and the application process. Upload PDF documents to enhance the AI's knowledge.</p>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="chat-container">
+                <div class="chat-messages" id="chat-messages">
+                    {% for message in chat_history %}
+                        {% if message.role == 'user' %}
+                            <div class="message user-message">
+                                {{ message.content }}
+                                <div class="message-time">{{ message.timestamp|date:"g:i A" }}</div>
                             </div>
+                        {% elif message.role == 'assistant' %}
+                            <div class="message assistant-message">
+                                {{ message.content|linebreaksbr }}
+                                <div class="message-time">{{ message.timestamp|date:"g:i A" }}</div>
+                            </div>
+                        {% elif message.role == 'system' %}
+                            <div class="message system-message">
+                                {{ message.content }}
+                                <div class="message-time">{{ message.timestamp|date:"g:i A" }}</div>
+                            </div>
+                        {% endif %}
+                    {% empty %}
+                        <div class="message assistant-message">
+                            Hello! I'm your delivery driver recruitment assistant. I can answer questions about job requirements, benefits, application steps, and more. How can I help you today?
                         </div>
-                        
-                        <div class="chat-input">
-                            <input type="text" id="messageInput" placeholder="Type your message here..." class="form-control">
-                            <button id="sendButton" class="btn btn-primary">
-                                <i class="bi bi-send-fill"></i>
-                            </button>
-                        </div>
+                    {% endfor %}
+                    <div class="typing-indicator" id="typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
                     </div>
                 </div>
-            </div>
-            
-            <div class="card shadow-sm mt-4" data-aos="fade-up" data-aos-delay="200">
-                <div class="card-body">
-                    <h5 class="card-title">Upload Documents</h5>
-                    <p class="text-muted">Have questions about specific documents? Upload them here and our assistant can reference them.</p>
-                    <form id="documentUploadForm" method="post" enctype="multipart/form-data" action="{% url 'chatbot:upload_document' %}">
-                        {% csrf_token %}
-                        <div class="mb-3">
-                            <input type="file" class="form-control" id="documentFile" name="document" accept=".pdf">
-                        </div>
-                        <button type="submit" class="btn btn-outline-primary">Upload PDF</button>
+                <div class="chat-input">
+                    <form id="chat-form" class="d-flex">
+                        <input type="text" id="user-message" class="form-control me-2" placeholder="Type your message here..." autocomplete="off" required>
+                        <button type="submit" class="btn btn-primary">Send</button>
                     </form>
                 </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="file-upload-container">
+                <h3 class="file-upload-heading">Upload Documents</h3>
+                <p class="file-upload-info">Upload PDF documents to enhance the AI assistant's knowledge base. This helps the assistant provide more accurate and detailed information.</p>
+                
+                <form id="upload-form" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="document" class="form-label">Select PDF file</label>
+                        <input type="file" class="form-control" id="document" name="document" accept=".pdf" required>
+                    </div>
+                    <button type="submit" class="btn btn-success">Upload Document</button>
+                </form>
+                
+                <div id="file-status"></div>
+            </div>
+            
+            <div class="mt-4 p-3 bg-light rounded">
+                <h4>Example Questions:</h4>
+                <ul class="suggestion-list">
+                    <li><a href="#" class="question-suggestion">What are the requirements to become a delivery driver?</a></li>
+                    <li><a href="#" class="question-suggestion">How much can I earn as a delivery driver?</a></li>
+                    <li><a href="#" class="question-suggestion">What's the application process like?</a></li>
+                    <li><a href="#" class="question-suggestion">Do I need my own vehicle?</a></li>
+                    <li><a href="#" class="question-suggestion">What areas do you service?</a></li>
+                </ul>
             </div>
         </div>
     </div>
@@ -190,97 +225,179 @@
 {% block extra_js %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const chatMessages = document.getElementById('chatMessages');
-        const messageInput = document.getElementById('messageInput');
-        const sendButton = document.getElementById('sendButton');
-        const typingIndicator = document.getElementById('typingIndicator');
+        const chatForm = document.getElementById('chat-form');
+        const userMessageInput = document.getElementById('user-message');
+        const chatMessages = document.getElementById('chat-messages');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const uploadForm = document.getElementById('upload-form');
+        const fileStatus = document.getElementById('file-status');
+        const sessionId = '{{ session_id }}';
         
-        // Auto-scroll to bottom of chat
+        // Scroll to bottom of chat messages
         function scrollToBottom() {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
         
-        // Initial scroll to bottom
-        scrollToBottom();
-        
-        // Add a new message to the chat
-        function addMessage(content, isUser = false) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `chat-message ${isUser ? 'user-message' : 'assistant-message'}`;
+        // Add message to chat
+        function addMessage(content, role, timestamp = null) {
+            const messageEl = document.createElement('div');
+            messageEl.classList.add('message');
             
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
+            if (role === 'user') {
+                messageEl.classList.add('user-message');
+                messageEl.textContent = content;
+            } else if (role === 'assistant') {
+                messageEl.classList.add('assistant-message');
+                messageEl.innerHTML = content.replace(/\n/g, '<br>');
+            } else if (role === 'system') {
+                messageEl.classList.add('system-message');
+                messageEl.textContent = content;
+            }
             
-            messageDiv.innerHTML = `
-                <div class="message-bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}">
-                    ${content}
-                    <div class="message-time">${timeStr}</div>
-                </div>
-            `;
+            // Add timestamp if provided
+            if (timestamp) {
+                const timeEl = document.createElement('div');
+                timeEl.classList.add('message-time');
+                
+                // Format timestamp
+                const date = new Date(timestamp);
+                timeEl.textContent = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                
+                messageEl.appendChild(timeEl);
+            } else {
+                const timeEl = document.createElement('div');
+                timeEl.classList.add('message-time');
+                timeEl.textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                messageEl.appendChild(timeEl);
+            }
             
             // Insert before typing indicator
-            chatMessages.insertBefore(messageDiv, typingIndicator);
+            chatMessages.insertBefore(messageEl, typingIndicator);
             scrollToBottom();
         }
         
-        // Send message when send button is clicked
-        sendButton.addEventListener('click', sendMessage);
+        // Show typing indicator
+        function showTypingIndicator() {
+            typingIndicator.style.display = 'block';
+            scrollToBottom();
+        }
         
-        // Send message when Enter key is pressed
-        messageInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                sendMessage();
+        // Hide typing indicator
+        function hideTypingIndicator() {
+            typingIndicator.style.display = 'none';
+        }
+        
+        // Send message to API
+        async function sendMessage(message) {
+            showTypingIndicator();
+            
+            try {
+                const response = await fetch('/chat/api/send_message/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        session_id: sessionId
+                    })
+                });
+                
+                const data = await response.json();
+                hideTypingIndicator();
+                
+                if (data.success) {
+                    addMessage(data.message, 'assistant', data.timestamp);
+                } else {
+                    addMessage(data.error || 'Sorry, I encountered an error processing your request.', 'system');
+                }
+            } catch (error) {
+                hideTypingIndicator();
+                addMessage('Sorry, there was a network error. Please try again.', 'system');
+                console.error('Error sending message:', error);
+            }
+        }
+        
+        // Handle chat form submission
+        chatForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const message = userMessageInput.value.trim();
+            if (!message) return;
+            
+            addMessage(message, 'user');
+            userMessageInput.value = '';
+            
+            sendMessage(message);
+        });
+        
+        // Handle file upload
+        uploadForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('document');
+            if (!fileInput.files.length) {
+                showFileStatus('Please select a file', false);
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                showFileStatus('Only PDF files are allowed', false);
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('document', file);
+            
+            showFileStatus('Uploading document...', true);
+            
+            try {
+                const response = await fetch('/chat/api/upload_document/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showFileStatus('Document uploaded successfully: ' + file.name, true);
+                    // Add system message about uploaded document
+                    addMessage(`Document uploaded: ${file.name}`, 'system');
+                } else {
+                    showFileStatus(data.error || 'Error uploading document', false);
+                }
+            } catch (error) {
+                showFileStatus('Network error during upload', false);
+                console.error('Error uploading document:', error);
             }
         });
         
-        // Send message to API
-        function sendMessage() {
-            const message = messageInput.value.trim();
-            if (!message) return;
+        // Show file status
+        function showFileStatus(message, isSuccess) {
+            fileStatus.textContent = message;
+            fileStatus.style.display = 'block';
             
-            // Add user message to chat
-            addMessage(message, true);
+            fileStatus.className = isSuccess ? 'status-success' : 'status-error';
             
-            // Clear input
-            messageInput.value = '';
-            
-            // Show typing indicator
-            typingIndicator.style.display = 'flex';
-            scrollToBottom();
-            
-            // Send to API
-            fetch('{% url "chatbot:send_message_api" %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('input[name="csrfmiddlewaretoken"]').value
-                },
-                body: JSON.stringify({
-                    message: message
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Hide typing indicator
-                typingIndicator.style.display = 'none';
-                
-                if (data.error) {
-                    // Show error message
-                    addMessage(`Error: ${data.message || data.error}`, false);
-                } else {
-                    // Show assistant response
-                    addMessage(data.assistant_message.content, false);
-                }
-            })
-            .catch(error => {
-                // Hide typing indicator
-                typingIndicator.style.display = 'none';
-                
-                // Show error message
-                addMessage(`Error: Could not connect to the server. Please try again later.`, false);
-                console.error('Error:', error);
-            });
+            setTimeout(() => {
+                fileStatus.style.display = 'none';
+            }, 5000);
         }
+        
+        // Handle example question suggestions
+        document.querySelectorAll('.question-suggestion').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                const question = this.textContent;
+                userMessageInput.value = question;
+                chatForm.dispatchEvent(new Event('submit'));
+            });
+        });
+        
+        // Initialize scroll
+        scrollToBottom();
     });
 </script>
 {% endblock %}

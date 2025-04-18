@@ -160,7 +160,9 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
 
 # Email configuration
-EMAIL_BACKEND = 'utils.sendgrid_backend.SendGridBackend'
+# Temporarily using console backend for email while testing chatbot
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# Keep SendGrid configuration for future use
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'cucuiet.george@gmail.com')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
