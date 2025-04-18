@@ -174,3 +174,7 @@ GOOGLE_SHEETS = {
     'enabled': os.environ.get('GOOGLE_SHEETS_ENABLED', 'False') == 'True',
     'spreadsheet_id': os.environ.get('GOOGLE_SHEETS_ID', ''),  # Add your Google Sheet ID here
 }
+
+# OpenAI API Configuration
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-3.5-turbo')

@@ -1,0 +1,286 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chat with Our Assistant | Delivery Driver Recruitment{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chat-container {
+        height: 500px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 15px;
+        background-color: #f8f9fa;
+    }
+    
+    .chat-input {
+        display: flex;
+        padding: 10px;
+        border-top: 1px solid #ddd;
+        background-color: #fff;
+    }
+    
+    .chat-input input {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-right: 10px;
+    }
+    
+    .chat-message {
+        margin-bottom: 15px;
+        display: flex;
+    }
+    
+    .user-message {
+        justify-content: flex-end;
+    }
+    
+    .assistant-message {
+        justify-content: flex-start;
+    }
+    
+    .message-bubble {
+        max-width: 70%;
+        padding: 10px 15px;
+        border-radius: 18px;
+        position: relative;
+    }
+    
+    .user-bubble {
+        background-color: #0084ff;
+        color: white;
+        border-bottom-right-radius: 5px;
+    }
+    
+    .assistant-bubble {
+        background-color: #e5e5ea;
+        color: #000;
+        border-bottom-left-radius: 5px;
+    }
+    
+    .message-time {
+        font-size: 0.7rem;
+        color: #999;
+        margin-top: 5px;
+        text-align: right;
+    }
+    
+    .typing-indicator {
+        display: none;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    
+    .typing-indicator .dot {
+        height: 8px;
+        width: 8px;
+        margin: 0 1px;
+        background-color: #999;
+        border-radius: 50%;
+        display: inline-block;
+        animation: typing 1.5s infinite ease-in-out;
+    }
+    
+    .typing-indicator .dot:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+    
+    .typing-indicator .dot:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+    
+    @keyframes typing {
+        0% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+        100% { transform: translateY(0); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-lg" data-aos="fade-up">
+                <div class="card-header bg-primary text-white">
+                    <h1 class="h3 mb-0">Chat with our Recruitment Assistant</h1>
+                </div>
+                <div class="card-body p-0">
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chatMessages">
+                            {% for message in messages %}
+                                {% if message.role == 'user' %}
+                                    <div class="chat-message user-message">
+                                        <div class="message-bubble user-bubble">
+                                            {{ message.content }}
+                                            <div class="message-time">{{ message.timestamp|date:"g:i A" }}</div>
+                                        </div>
+                                    </div>
+                                {% elif message.role == 'assistant' %}
+                                    <div class="chat-message assistant-message">
+                                        <div class="message-bubble assistant-bubble">
+                                            {{ message.content }}
+                                            <div class="message-time">{{ message.timestamp|date:"g:i A" }}</div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            {% empty %}
+                                <div class="chat-message assistant-message">
+                                    <div class="message-bubble assistant-bubble">
+                                        <p>Hello! I'm your delivery driver recruitment assistant. How can I help you today?</p>
+                                        <p>I can answer questions about:</p>
+                                        <ul>
+                                            <li>Application process</li>
+                                            <li>Job requirements</li>
+                                            <li>Pay and benefits</li>
+                                            <li>Scheduling and shifts</li>
+                                            <li>Vehicle requirements</li>
+                                        </ul>
+                                        <p>Feel free to ask me anything!</p>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                            
+                            <div class="chat-message assistant-message typing-indicator" id="typingIndicator">
+                                <div class="message-bubble assistant-bubble">
+                                    <div class="dot"></div>
+                                    <div class="dot"></div>
+                                    <div class="dot"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="chat-input">
+                            <input type="text" id="messageInput" placeholder="Type your message here..." class="form-control">
+                            <button id="sendButton" class="btn btn-primary">
+                                <i class="bi bi-send-fill"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card shadow-sm mt-4" data-aos="fade-up" data-aos-delay="200">
+                <div class="card-body">
+                    <h5 class="card-title">Upload Documents</h5>
+                    <p class="text-muted">Have questions about specific documents? Upload them here and our assistant can reference them.</p>
+                    <form id="documentUploadForm" method="post" enctype="multipart/form-data" action="{% url 'chatbot:upload_document' %}">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <input type="file" class="form-control" id="documentFile" name="document" accept=".pdf">
+                        </div>
+                        <button type="submit" class="btn btn-outline-primary">Upload PDF</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const chatMessages = document.getElementById('chatMessages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typingIndicator');
+        
+        // Auto-scroll to bottom of chat
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // Initial scroll to bottom
+        scrollToBottom();
+        
+        // Add a new message to the chat
+        function addMessage(content, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${isUser ? 'user-message' : 'assistant-message'}`;
+            
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], {hour: 'numeric', minute:'2-digit'});
+            
+            messageDiv.innerHTML = `
+                <div class="message-bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}">
+                    ${content}
+                    <div class="message-time">${timeStr}</div>
+                </div>
+            `;
+            
+            // Insert before typing indicator
+            chatMessages.insertBefore(messageDiv, typingIndicator);
+            scrollToBottom();
+        }
+        
+        // Send message when send button is clicked
+        sendButton.addEventListener('click', sendMessage);
+        
+        // Send message when Enter key is pressed
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        // Send message to API
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            // Add user message to chat
+            addMessage(message, true);
+            
+            // Clear input
+            messageInput.value = '';
+            
+            // Show typing indicator
+            typingIndicator.style.display = 'flex';
+            scrollToBottom();
+            
+            // Send to API
+            fetch('{% url "chatbot:send_message_api" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('input[name="csrfmiddlewaretoken"]').value
+                },
+                body: JSON.stringify({
+                    message: message
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Hide typing indicator
+                typingIndicator.style.display = 'none';
+                
+                if (data.error) {
+                    // Show error message
+                    addMessage(`Error: ${data.message || data.error}`, false);
+                } else {
+                    // Show assistant response
+                    addMessage(data.assistant_message.content, false);
+                }
+            })
+            .catch(error => {
+                // Hide typing indicator
+                typingIndicator.style.display = 'none';
+                
+                // Show error message
+                addMessage(`Error: Could not connect to the server. Please try again later.`, false);
+                console.error('Error:', error);
+            });
+        }
+    });
+</script>
+{% endblock %}
