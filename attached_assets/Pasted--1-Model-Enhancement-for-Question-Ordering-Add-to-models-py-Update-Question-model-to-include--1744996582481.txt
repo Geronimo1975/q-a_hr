@@ -1,0 +1,532 @@
+# 1. Model Enhancement for Question Ordering
+
+# Add to models.py - Update Question model to include order field
+from django.db import models
+
+class Question(models.Model):
+    QUESTION_TYPES = (
+        ('text', 'Text Input'),
+        ('number', 'Number Input'),
+        ('choice', 'Multiple Choice'),
+        ('boolean', 'Yes/No'),
+        ('file', 'File Upload'),
+        ('date', 'Date of Birth'),
+        ('address', 'Address'),
+        ('phone', 'Phone Number'),
+    )
+    
+    stage = models.ForeignKey('QuestionStage', on_delete=models.CASCADE, related_name='questions')
+    question_text = models.TextField()
+    question_type = models.CharField(max_length=20, choices=QUESTION_TYPES)
+    is_required = models.BooleanField(default=True)
+    order = models.IntegerField(default=0)  # Field to manage question order
+    choices = models.TextField(blank=True, help_text="For multiple choice, provide options separated by semicolons")
+    
+    class Meta:
+        ordering = ['stage', 'order']  # Order by stage first, then by order field
+    
+    def __str__(self):
+        return f"{self.stage.name} - Q{self.order}: {self.question_text[:50]}"
+
+
+# 2. Admin Interface Enhancement
+
+# Update admin.py for better question management
+from django.contrib import admin
+from django.urls import path
+from django.http import JsonResponse
+from django.shortcuts import render, get_object_or_404
+from .models import Question, QuestionStage, Answer
+
+class QuestionAdmin(admin.ModelAdmin):
+    list_display = ('order', 'question_text', 'stage', 'question_type', 'is_required')
+    list_filter = ('stage', 'question_type', 'is_required')
+    search_fields = ('question_text',)
+    list_editable = ('order',)  # Allow editing order directly in the list view
+    ordering = ('stage', 'order')
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('reorder/', self.admin_site.admin_view(self.reorder_view), name='recruitment_question_reorder'),
+            path('sync-to-sheets/', self.admin_site.admin_view(self.sync_to_sheets), name='recruitment_question_sync_to_sheets'),
+        ]
+        return custom_urls + urls
+    
+    def reorder_view(self, request):
+        """Custom view for reordering questions with drag and drop"""
+        if request.method == 'POST':
+            # Process AJAX request for reordering
+            question_id = request.POST.get('question_id')
+            new_order = request.POST.get('new_order')
+            stage_id = request.POST.get('stage_id')
+            
+            if question_id and new_order:
+                # Update the question order
+                question = get_object_or_404(Question, id=question_id)
+                
+                # Get all questions from the same stage
+                stage_questions = Question.objects.filter(stage=question.stage).exclude(id=question.id).order_by('order')
+                
+                # Adjust orders of all questions
+                question.order = int(new_order)
+                question.save()
+                
+                # Reorder remaining questions to avoid duplicates
+                current_order = 1
+                for q in stage_questions:
+                    if current_order == int(new_order):
+                        current_order += 1
+                    q.order = current_order
+                    q.save()
+                    current_order += 1
+                
+                return JsonResponse({'status': 'success'})
+            
+            return JsonResponse({'status': 'error', 'message': 'Invalid parameters'})
+            
+        # Get all stages and their questions for the template
+        stages = QuestionStage.objects.all()
+        context = {
+            'stages': stages,
+            'title': 'Reorder Questions',
+        }
+        return render(request, 'admin/recruitment/question/reorder.html', context)
+    
+    def sync_to_sheets(self, request):
+        """Sync all questions to Google Sheets"""
+        from .utils.google_sheets import sync_questions_to_sheets
+        
+        try:
+            result = sync_questions_to_sheets()
+            if result['success']:
+                self.message_user(request, f"Successfully synced {result['count']} questions to Google Sheets")
+            else:
+                self.message_user(request, f"Error: {result['error']}", level='ERROR')
+        except Exception as e:
+            self.message_user(request, f"Error syncing to Google Sheets: {str(e)}", level='ERROR')
+        
+        return JsonResponse({'status': 'complete'})
+    
+    def save_model(self, request, obj, form, change):
+        """Override save_model to handle automatic ordering"""
+        if not obj.order:  # If order is not set
+            # Get the maximum order in this stage
+            max_order = Question.objects.filter(stage=obj.stage).aggregate(models.Max('order'))['order__max'] or 0
+            obj.order = max_order + 1
+        
+        super().save_model(request, obj, form, change)
+
+
+# 3. Google Sheets Integration
+# Create utils/google_sheets.py for handling Google Sheets integration
+
+import os
+import json
+from datetime import datetime
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from django.conf import settings
+from ..models import Question, QuestionStage, Answer
+
+def get_sheets_service():
+    """Get the Google Sheets service"""
+    try:
+        creds_path = os.path.join(settings.BASE_DIR, 'credentials.json')
+        creds = Credentials.from_service_account_file(
+            creds_path, 
+            scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
+        
+        service = build('sheets', 'v4', credentials=creds)
+        return service.spreadsheets()
+    except Exception as e:
+        print(f"Error getting Google Sheets service: {str(e)}")
+        return None
+
+def sync_questions_to_sheets():
+    """Sync all questions to Google Sheets with proper numbering and ordering"""
+    try:
+        sheets = get_sheets_service()
+        if not sheets:
+            return {"success": False, "error": "Could not initialize Google Sheets service"}
+        
+        sheet_id = settings.GOOGLE_SHEETS_ID
+        
+        # Prepare data - Headers first
+        data = [["Nr.", "Question", "Question Type", "Stage", "Required"]]
+        
+        # Get all questions ordered by stage and order
+        questions = Question.objects.all().order_by('stage', 'order')
+        
+        # Add questions with sequential numbering
+        for i, question in enumerate(questions, 1):
+            data.append([
+                i,  # Sequential number
+                question.question_text,
+                dict(Question.QUESTION_TYPES).get(question.question_type, question.question_type),
+                question.stage.name,
+                "Yes" if question.is_required else "No"
+            ])
+        
+        # Clear existing data and update with new data
+        sheets.values().clear(
+            spreadsheetId=sheet_id,
+            range="Questions!A:E"
+        ).execute()
+        
+        sheets.values().update(
+            spreadsheetId=sheet_id,
+            range="Questions!A1",
+            valueInputOption="RAW",
+            body={"values": data}
+        ).execute()
+        
+        return {"success": True, "count": len(questions)}
+        
+    except HttpError as e:
+        return {"success": False, "error": f"Google Sheets API error: {str(e)}"}
+    except Exception as e:
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
+def test_sheet_connection():
+    """Test the Google Sheets connection and add a test record"""
+    try:
+        sheets = get_sheets_service()
+        if not sheets:
+            return {"success": False, "error": "Could not initialize Google Sheets service"}
+        
+        sheet_id = settings.GOOGLE_SHEETS_ID
+        
+        # Create a test record
+        test_data = [
+            ["Test Nr.", "Test Question", "Test Answer 1", "Test Answer 2"],
+            [999, "Is this a test question?", "Yes", "Definitely Yes"]
+        ]
+        
+        # Append test data
+        sheets.values().append(
+            spreadsheetId=sheet_id,
+            range="Test!A1",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": test_data}
+        ).execute()
+        
+        return {"success": True, "message": "Test record added successfully"}
+        
+    except Exception as e:
+        return {"success": False, "error": f"Error testing sheet connection: {str(e)}"}
+
+def save_question_response(user_id, question_id, answer_text):
+    """Save a question response to Google Sheets as answers come in"""
+    try:
+        sheets = get_sheets_service()
+        if not sheets:
+            return {"success": False, "error": "Could not initialize Google Sheets service"}
+        
+        sheet_id = settings.GOOGLE_SHEETS_ID
+        
+        # Get question details
+        question = Question.objects.get(id=question_id)
+        
+        # Prepare data row
+        data = [[
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Timestamp
+            user_id,
+            question.order,  # Question number
+            question.question_text,
+            answer_text
+        ]]
+        
+        # Append data to the Responses sheet
+        sheets.values().append(
+            spreadsheetId=sheet_id,
+            range="Responses!A1",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": data}
+        ).execute()
+        
+        return {"success": True}
+        
+    except Exception as e:
+        print(f"Error saving response to sheet: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+# 4. JavaScript for Reordering in Admin Interface
+
+# Create a file: static/admin/js/question_reorder.js
+"""
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize sortable for each question list
+    document.querySelectorAll('.sortable-questions').forEach(function(el) {
+        new Sortable(el, {
+            animation: 150,
+            handle: '.drag-handle',
+            onEnd: function(evt) {
+                const questionId = evt.item.getAttribute('data-id');
+                const newOrder = evt.newIndex + 1;
+                const stageId = evt.item.closest('.question-stage').getAttribute('data-stage-id');
+                
+                // Send AJAX request to update the order
+                const form = new FormData();
+                form.append('question_id', questionId);
+                form.append('new_order', newOrder);
+                form.append('stage_id', stageId);
+                
+                fetch('/admin/recruitment/question/reorder/', {
+                    method: 'POST',
+                    body: form,
+                    headers: {
+                        'X-CSRFToken': getCsrfToken()
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Update displayed numbers
+                        updateQuestionNumbers(evt.item.closest('.question-stage'));
+                    } else {
+                        alert('Error updating question order: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while updating the question order.');
+                });
+            }
+        });
+    });
+    
+    // Function to update question numbers after reordering
+    function updateQuestionNumbers(stageElement) {
+        const questions = stageElement.querySelectorAll('.question-item');
+        questions.forEach((question, index) => {
+            question.querySelector('.question-number').textContent = index + 1;
+        });
+    }
+    
+    // Function to get CSRF token
+    function getCsrfToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]').value;
+    }
+    
+    // Sync to Google Sheets button
+    document.getElementById('sync-to-sheets-btn').addEventListener('click', function(e) {
+        e.preventDefault();
+        
+        const btn = this;
+        btn.disabled = true;
+        btn.textContent = 'Syncing...';
+        
+        fetch('/admin/recruitment/question/sync-to-sheets/', {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.textContent = 'Sync to Google Sheets';
+            
+            if (data.status === 'complete') {
+                alert('Questions synced to Google Sheets successfully!');
+            } else {
+                alert('Error syncing to Google Sheets.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            btn.disabled = false;
+            btn.textContent = 'Sync to Google Sheets';
+            alert('An error occurred while syncing to Google Sheets.');
+        });
+    });
+});
+"""
+
+
+# 5. HTML Template for Reordering Questions
+
+# Create a template: templates/admin/recruitment/question/reorder.html
+"""
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'admin/css/reorder.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
+    <script src="{% static 'admin/js/question_reorder.js' %}" defer></script>
+{% endblock %}
+
+{% block content %}
+    <div class="reorder-container">
+        <h1>Reorder Questions</h1>
+        
+        <p class="help">Drag and drop questions to change their order. Changes are saved automatically.</p>
+        
+        <div class="actions">
+            <button id="sync-to-sheets-btn" class="button">Sync to Google Sheets</button>
+            <a href="{% url 'admin:recruitment_question_changelist' %}" class="button">Back to Question List</a>
+        </div>
+        
+        {% csrf_token %}
+        
+        {% for stage in stages %}
+            <div class="question-stage" data-stage-id="{{ stage.id }}">
+                <h2>{{ stage.name }}</h2>
+                
+                <ul class="sortable-questions">
+                    {% for question in stage.questions.all %}
+                        <li class="question-item" data-id="{{ question.id }}">
+                            <div class="drag-handle">☰</div>
+                            <span class="question-number">{{ question.order }}</span>
+                            <div class="question-text">{{ question.question_text }}</div>
+                            <div class="question-type">{{ question.get_question_type_display }}</div>
+                        </li>
+                    {% empty %}
+                        <li class="empty-message">No questions in this stage yet.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endfor %}
+    </div>
+{% endblock %}
+"""
+
+
+# 6. CSS for Reordering Interface
+
+# Create a file: static/admin/css/reorder.css
+"""
+.reorder-container {
+    margin: 20px 0;
+}
+
+.question-stage {
+    margin-bottom: 30px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.question-stage h2 {
+    background-color: #f5f5f5;
+    margin: 0;
+    padding: 10px 15px;
+    font-size: 16px;
+    border-bottom: 1px solid #ddd;
+}
+
+.sortable-questions {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.question-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    border-bottom: 1px solid #eee;
+    background-color: white;
+    transition: background-color 0.2s;
+}
+
+.question-item:last-child {
+    border-bottom: none;
+}
+
+.question-item:hover {
+    background-color: #f9f9f9;
+}
+
+.drag-handle {
+    cursor: move;
+    color: #999;
+    margin-right: 15px;
+    font-size: 16px;
+}
+
+.question-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    background-color: #007bff;
+    color: white;
+    border-radius: 50%;
+    margin-right: 15px;
+    font-weight: bold;
+}
+
+.question-text {
+    flex: 1;
+    margin-right: 15px;
+}
+
+.question-type {
+    color: #666;
+    font-size: 13px;
+    width: 120px;
+    text-align: right;
+}
+
+.empty-message {
+    padding: 15px;
+    color: #999;
+    font-style: italic;
+}
+
+.actions {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.sortable-ghost {
+    opacity: 0.4;
+    background-color: #f0f0f0;
+}
+"""
+
+
+# 7. Add Function to Test Google Sheets Connection from Admin
+
+# Add to views.py or create a new admin_views.py
+from django.http import JsonResponse
+from django.contrib.admin.views.decorators import staff_member_required
+from django.views.decorators.http import require_POST
+from .utils.google_sheets import test_sheet_connection
+
+@staff_member_required
+@require_POST
+def test_sheets_connection(request):
+    """Test Google Sheets connection and add a test record"""
+    result = test_sheet_connection()
+    
+    return JsonResponse({
+        'success': result['success'],
+        'message': result.get('message', ''),
+        'error': result.get('error', '')
+    })
+
+
+# Update urls.py to include the test endpoint
+from django.urls import path
+from . import admin_views
+
+urlpatterns = [
+    # Other URLs...
+    path('admin/test-sheets-connection/', admin_views.test_sheets_connection, name='test_sheets_connection'),
+]

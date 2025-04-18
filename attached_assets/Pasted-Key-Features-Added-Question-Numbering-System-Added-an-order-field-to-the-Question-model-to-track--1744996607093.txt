@@ -1,0 +1,79 @@
+Key Features Added
+
+Question Numbering System:
+
+Added an order field to the Question model to track sequence
+Questions now display with numbers in both admin interface and exports
+Sequential numbering is maintained when adding/removing questions
+
+
+Reordering Capability:
+
+Drag-and-drop interface for reordering questions
+Custom admin view for managing question order
+Automatic updating of question numbers when reordering
+
+
+Google Sheets Integration:
+
+Added functionality to sync all questions to Google Sheets
+Column headers include "Nr.", "Question", "Question Type", "Stage", "Required"
+Answers are recorded in a separate sheet with question numbers
+
+
+Testing Connection:
+
+Added a test function to verify Google Sheets connectivity
+Includes ability to send test data to confirm proper formatting
+Error handling to diagnose connection issues
+
+
+
+Implementation Steps
+
+Update Your Models:
+
+Add the order field to your Question model
+Update ordering in the Meta class to use stage and order
+
+
+Enhance Admin Interface:
+
+Create custom admin views for reordering questions
+Add functionality to sync questions to Google Sheets
+Include list editing for the order field
+
+
+Add Google Sheets Integration:
+
+Create utility functions for connecting to Google Sheets
+Implement functions for syncing questions and saving responses
+Add testing capabilities to verify connectivity
+
+
+Create UI Components:
+
+Add JavaScript for drag-and-drop reordering
+Create templates for the reordering interface
+Style components for better usability
+
+
+Add Testing Functionality:
+
+Create an endpoint to test the Google Sheets connection
+Implement a function to send test data to the sheet
+Include error reporting for debugging
+
+
+
+How to Test
+After implementing these changes, you can test the system by:
+
+Logging in as an admin user
+Visiting the question management interface
+Reordering questions using drag and drop
+Clicking "Sync to Google Sheets" to update the spreadsheet
+Logging in with a different account to complete the questionnaire
+Checking Google Sheets to verify answers are recorded with question numbers
+
+This implementation should ensure that questions are properly numbered, can be easily reordered, and all data is correctly synchronized with your Google Sheets document.

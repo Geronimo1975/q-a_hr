@@ -1,0 +1,162 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        .question-stage {
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+        
+        .stage-title {
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .sortable-questions {
+            list-style-type: none;
+            padding: 0;
+        }
+        
+        .question-item {
+            margin-bottom: 8px;
+            padding: 10px;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .question-item:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .question-number {
+            margin-right: 10px;
+            font-weight: bold;
+            min-width: 25px;
+            text-align: center;
+            background-color: #79aec8;
+            color: white;
+            border-radius: 50%;
+            display: inline-block;
+            width: 25px;
+            height: 25px;
+            line-height: 25px;
+        }
+        
+        .drag-handle {
+            cursor: move;
+            margin-right: 10px;
+            color: #999;
+        }
+        
+        .drag-handle:hover {
+            color: #555;
+        }
+        
+        .question-text {
+            flex-grow: 1;
+        }
+        
+        .required-badge {
+            font-size: 0.8em;
+            background-color: #417690;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 3px;
+            margin-left: 10px;
+        }
+        
+        .type-badge {
+            font-size: 0.8em;
+            background-color: #79aec8;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 3px;
+            margin-left: 10px;
+        }
+        
+        .tools-container {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f5f5f5;
+        }
+        
+        /* For dark mode compatibility */
+        body.dark-mode .question-stage {
+            background-color: #222;
+            border-color: #444;
+        }
+        
+        body.dark-mode .question-item {
+            background-color: #333;
+            border-color: #444;
+        }
+        
+        body.dark-mode .question-item:hover {
+            background-color: #444;
+        }
+    </style>
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="{% static 'admin/js/question_reorder.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label='recruitment' %}">{% trans 'Recruitment' %}</a>
+&rsaquo; <a href="{% url 'admin:recruitment_question_changelist' %}">{% trans 'Questions' %}</a>
+&rsaquo; {% trans 'Reorder Questions' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>{% trans "Reorder Questions" %}</h1>
+    
+    <div class="tools-container">
+        <h2>{% trans "Tools" %}</h2>
+        <p>{% trans "Drag and drop questions to change their order. The order will be automatically saved." %}</p>
+        <button id="sync-to-sheets-btn" class="button">{% trans "Sync to Google Sheets" %}</button>
+        <a href="{% url 'admin:recruitment_question_changelist' %}" class="button">{% trans "Back to Questions" %}</a>
+    </div>
+    
+    {% csrf_token %}
+    
+    {% for stage in stages %}
+    <div class="question-stage" data-stage-id="{{ stage.id }}">
+        <div class="stage-title">Stage {{ stage.stage_number }}: {{ stage.stage_name }}</div>
+        
+        <ul class="sortable-questions">
+            {% for question in stage.questions.all %}
+            <li class="question-item" data-id="{{ question.id }}">
+                <span class="drag-handle">⋮⋮</span>
+                <span class="question-number">{{ question.order }}</span>
+                <span class="question-text">{{ question.question_text }}</span>
+                <span class="type-badge">{{ question.get_question_type_display }}</span>
+                {% if question.is_required %}
+                <span class="required-badge">Required</span>
+                {% endif %}
+            </li>
+            {% empty %}
+            <li>No questions for this stage yet.</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
