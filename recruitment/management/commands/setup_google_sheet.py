@@ -6,7 +6,7 @@ class Command(BaseCommand):
     help = 'Set up Google Sheet for storing questionnaire responses'
 
     def handle(self, *args, **options):
-        if not settings.GOOGLE_SHEETS.get('enabled', False):
+        if not hasattr(settings, 'GOOGLE_SHEETS') or not settings.GOOGLE_SHEETS.get('enabled', False):
             self.stdout.write(self.style.WARNING('Google Sheets integration is disabled in settings'))
             return
         

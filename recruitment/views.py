@@ -144,3 +144,27 @@ def dashboard(request):
 @login_required
 def success_view(request):
     return render(request, 'recruitment/success.html')
+
+
+def track_source(request, tracking_code=None):
+    """Track the source of an application based on a tracking code."""
+    if not tracking_code:
+        return redirect('home')
+    
+    # Store tracking code in session
+    request.session['tracking_code'] = tracking_code
+    
+    # If the tracking code matches a source, log it
+    try:
+        source = ApplicationSource.objects.get(tracking_code=tracking_code)
+        # If user is logged in, associate them with this source
+        if request.user.is_authenticated:
+            ApplicantTracking.objects.get_or_create(
+                user=request.user,
+                defaults={'source': source}
+            )
+    except ApplicationSource.DoesNotExist:
+        # Invalid tracking code, but we'll still redirect to home
+        pass
+    
+    return redirect('home')
