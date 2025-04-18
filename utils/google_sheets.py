@@ -264,3 +264,69 @@ def create_sheet_if_needed(sheet_id):
     except Exception as e:
         print(f'An unexpected error occurred: {e}')
         return False
+
+def sync_questions_to_sheets():
+    """Sync all questions to Google Sheets with proper numbering and ordering"""
+    try:
+        sheets = get_service()
+        if not sheets:
+            return {"success": False, "error": "Could not initialize Google Sheets service"}
+        
+        sheet_id = settings.GOOGLE_SHEETS.get('spreadsheet_id')
+        if not sheet_id:
+            return {"success": False, "error": "No spreadsheet ID configured in settings"}
+        
+        # Prepare data - Headers first
+        data = [["Nr.", "Question", "Question Type", "Stage", "Required"]]
+        
+        # Get all questions ordered by stage and order
+        from recruitment.models import Question
+        questions = Question.objects.all().order_by('stage__stage_number', 'order')
+        
+        # Add questions with sequential numbering
+        for i, question in enumerate(questions, 1):
+            data.append([
+                i,  # Sequential number
+                question.question_text,
+                dict(Question.QUESTION_TYPES).get(question.question_type, question.question_type),
+                f"{question.stage.stage_number}: {question.stage.stage_name}",
+                "Yes" if question.is_required else "No"
+            ])
+        
+        # Create a Questions sheet if it doesn't exist
+        try:
+            spreadsheet = sheets.get(spreadsheetId=sheet_id).execute()
+            existing_sheets = [sheet['properties']['title'] for sheet in spreadsheet['sheets']]
+            
+            if 'Questions' not in existing_sheets:
+                sheets.batchUpdate(
+                    spreadsheetId=sheet_id,
+                    body={'requests': [{'addSheet': {'properties': {'title': 'Questions'}}}]}
+                ).execute()
+                print("Created 'Questions' sheet")
+        except Exception as e:
+            print(f"Error checking/creating Questions sheet: {e}")
+            return {"success": False, "error": f"Error setting up Questions sheet: {str(e)}"}
+        
+        # Clear existing data and update with new data
+        try:
+            sheets.values().clear(
+                spreadsheetId=sheet_id,
+                range="Questions!A:E"
+            ).execute()
+            
+            sheets.values().update(
+                spreadsheetId=sheet_id,
+                range="Questions!A1",
+                valueInputOption="RAW",
+                body={"values": data}
+            ).execute()
+            
+            return {"success": True, "count": len(questions)}
+        except Exception as e:
+            print(f"Error updating Questions sheet data: {e}")
+            return {"success": False, "error": f"Error updating Questions sheet: {str(e)}"}
+            
+    except Exception as e:
+        print(f"Unexpected error in sync_questions_to_sheets: {e}")
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}

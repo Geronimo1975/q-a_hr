@@ -1,8 +1,11 @@
 from django.contrib import admin
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
 from django.conf import settings
 from django.utils.html import mark_safe
+from django.shortcuts import render, get_object_or_404
+from django.urls import path, reverse
+from django.db import models
 import csv
 from django.utils import timezone
 from .models import QuestionStage, Question, Answer, ApplicationSource, ApplicantTracking
@@ -118,9 +121,11 @@ class FileUploadTypeFilter(admin.SimpleListFilter):
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
-    list_display = ('question_text', 'stage', 'question_type', 'get_type_details', 'is_required', 'order')
+    list_display = ('question_text', 'stage', 'question_type', 'get_type_details', 'is_required', 'order', 'reorder_link')
     list_filter = ('stage', 'question_type', 'is_required', FileUploadTypeFilter)
     search_fields = ('question_text',)
+    list_editable = ('order',)  # Allow editing order directly in the list view
+    actions = ['sync_to_google_sheets']
     fieldsets = (
         (None, {
             'fields': ('stage', 'question_text', 'question_type', 'is_required', 'order')
@@ -136,6 +141,82 @@ class QuestionAdmin(admin.ModelAdmin):
             'description': 'Configure file upload settings (only applicable if question type is "File Upload")'
         }),
     )
+    
+    def get_urls(self):
+        """Add custom URLs for reordering questions and syncing to sheets"""
+        urls = super().get_urls()
+        custom_urls = [
+            path('reorder/', self.admin_site.admin_view(self.reorder_view), 
+                 name='recruitment_question_reorder'),
+            path('sync-to-sheets/', self.admin_site.admin_view(self.sync_to_sheets_view), 
+                 name='recruitment_question_sync_to_sheets'),
+        ]
+        return custom_urls + urls
+    
+    def reorder_view(self, request):
+        """Custom view for reordering questions with drag and drop"""
+        if request.method == 'POST':
+            # Process AJAX request for reordering
+            question_id = request.POST.get('question_id')
+            new_order = request.POST.get('new_order')
+            stage_id = request.POST.get('stage_id')
+            
+            if question_id and new_order:
+                # Update the question order
+                question = get_object_or_404(Question, id=question_id)
+                
+                # Get all questions from the same stage
+                stage_questions = Question.objects.filter(stage=question.stage).exclude(id=question.id).order_by('order')
+                
+                # Adjust orders of all questions
+                question.order = int(new_order)
+                question.save()
+                
+                # Reorder remaining questions to avoid duplicates
+                current_order = 1
+                for q in stage_questions:
+                    if current_order == int(new_order):
+                        current_order += 1
+                    q.order = current_order
+                    q.save()
+                    current_order += 1
+                
+                return JsonResponse({'status': 'success'})
+            
+            return JsonResponse({'status': 'error', 'message': 'Invalid parameters'})
+            
+        # Get all stages and their questions for the template
+        stages = QuestionStage.objects.all().order_by('stage_number')
+        context = {
+            'stages': stages,
+            'title': 'Reorder Questions',
+            'opts': self.model._meta,
+        }
+        return render(request, 'admin/recruitment/question/reorder.html', context)
+    
+    def sync_to_sheets_view(self, request):
+        """API endpoint for syncing questions to Google Sheets"""
+        from utils.google_sheets import sync_questions_to_sheets
+        
+        result = sync_questions_to_sheets()
+        return JsonResponse(result)
+    
+    def sync_to_google_sheets(self, request, queryset):
+        """Admin action to sync selected questions to Google Sheets"""
+        from utils.google_sheets import sync_questions_to_sheets
+        
+        result = sync_questions_to_sheets()
+        if result['success']:
+            self.message_user(request, f"Successfully synced {result['count']} questions to Google Sheets", messages.SUCCESS)
+        else:
+            self.message_user(request, f"Error syncing questions: {result['error']}", messages.ERROR)
+    sync_to_google_sheets.short_description = "Sync selected questions to Google Sheets"
+    
+    def reorder_link(self, obj):
+        """Link to the reorder page"""
+        url = reverse('admin:recruitment_question_reorder')
+        return mark_safe(f'<a href="{url}" class="button">Reorder All</a>')
+    reorder_link.short_description = ""
     
     def get_type_details(self, obj):
         if obj.question_type == 'file':
@@ -156,6 +237,15 @@ class QuestionAdmin(admin.ModelAdmin):
                 form.base_fields['choices'].widget.attrs['placeholder'] = "Option 1;Option 2;Option 3"
                 form.base_fields['choices'].help_text = "Semicolon-separated list of choice options"
         return form
+        
+    def save_model(self, request, obj, form, change):
+        """Override save_model to handle automatic ordering"""
+        if not obj.order or obj.order == 0:  # If order is not set
+            # Get the maximum order in this stage
+            max_order = Question.objects.filter(stage=obj.stage).aggregate(models.Max('order'))['order__max'] or 0
+            obj.order = max_order + 1
+        
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Answer)
