@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/chatbot.css' %}">
+{% endblock %}
+
+{% block content %}
+<!-- Chat Widget -->
+<div class="chat-widget" id="chat-widget">
+  <!-- Chat Header -->
+  <div class="chat-widget-header">
+    <h3 class="chat-widget-title">Delivery Driver Assistant</h3>
+    <div class="chat-widget-controls">
+      <button class="chat-control-button" id="minimize-chat">–</button>
+      <button class="chat-control-button" id="close-chat">×</button>
+    </div>
+  </div>
+  
+  <!-- Introduction Card (shown on first load) -->
+  <div class="chat-intro" id="chat-intro">
+    <div class="assistant-avatar">
+      <img src="{% static 'img/assistant-avatar.png' %}" alt="Assistant" onerror="this.src='{% static 'img/placeholder-avatar.png' %}'">
+    </div>
+    <h4>Welcome to our Driver Recruitment Assistant</h4>
+    <p>I can help answer questions about the application process, requirements, compensation, scheduling, and other related topics.</p>
+    <p class="disclaimer">Many of my answers are generated with the help of artificial intelligence. I might make mistakes sometimes!</p>
+  </div>
+  
+  <!-- Chat Messages Area -->
+  <div class="chat-messages" id="chat-messages">
+    <!-- Messages will be inserted here dynamically -->
+    <div class="typing-indicator" id="typing-indicator">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+  
+  <!-- Topic Selection Buttons -->
+  <div class="topic-buttons">
+    <button class="topic-button" data-topic="Application">Application</button>
+    <button class="topic-button" data-topic="Requirements">Requirements</button>
+    <button class="topic-button" data-topic="Payment">Payment</button>
+    <button class="topic-button" data-topic="Vehicle">Vehicle</button>
+    <button class="topic-button" data-topic="Other">Other</button>
+  </div>
+  
+  <!-- Chat Input Area -->
+  <div class="chat-input">
+    <form id="chat-form">
+      <input type="text" id="user-message" placeholder="Type your message here..." autocomplete="off">
+      <button type="submit">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Chat launcher button (visible when chat is minimized) -->
+<button class="chat-launcher" id="chat-launcher">
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+</button>
+
+<!-- File upload modal -->
+<div class="upload-modal" id="upload-modal">
+  <div class="upload-modal-content">
+    <div class="upload-modal-header">
+      <h3>Upload Document</h3>
+      <button id="close-upload-modal">×</button>
+    </div>
+    <div class="upload-modal-body">
+      <p>Upload PDF documents to enhance the AI assistant's knowledge base.</p>
+      <form id="upload-form" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="file" id="document" name="document" accept=".pdf">
+        <button type="submit" class="upload-button">Upload Document</button>
+      </form>
+      <div id="file-status"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // DOM Elements
+    const chatWidget = document.getElementById('chat-widget');
+    const chatLauncher = document.getElementById('chat-launcher');
+    const minimizeButton = document.getElementById('minimize-chat');
+    const closeButton = document.getElementById('close-chat');
+    const chatMessages = document.getElementById('chat-messages');
+    const chatForm = document.getElementById('chat-form');
+    const userMessageInput = document.getElementById('user-message');
+    const typingIndicator = document.getElementById('typing-indicator');
+    const uploadForm = document.getElementById('upload-form');
+    const fileStatus = document.getElementById('file-status');
+    const uploadModal = document.getElementById('upload-modal');
+    const closeUploadModal = document.getElementById('close-upload-modal');
+    const chatIntro = document.getElementById('chat-intro');
+    
+    // Session ID for the chat (should be provided by the server)
+    const sessionId = '{{ session_id }}';
+    let isFirstMessage = true;
+    
+    // Initialize Chat
+    function initChat() {
+        // Toggle chat visibility
+        chatLauncher.addEventListener('click', () => {
+            chatWidget.classList.remove('minimized');
+            chatLauncher.classList.add('hidden');
+            scrollToBottom();
+        });
+        
+        minimizeButton.addEventListener('click', () => {
+            chatWidget.classList.add('minimized');
+            chatLauncher.classList.remove('hidden');
+        });
+        
+        closeButton.addEventListener('click', () => {
+            chatWidget.classList.add('minimized');
+            chatLauncher.classList.remove('hidden');
+        });
+        
+        // Handle topic button clicks
+        document.querySelectorAll('.topic-button').forEach(button => {
+            button.addEventListener('click', function() {
+                const topic = this.dataset.topic;
+                let question = '';
+                
+                switch(topic) {
+                    case 'Application':
+                        question = 'How do I apply to become a delivery driver?';
+                        break;
+                    case 'Requirements':
+                        question = 'What are the requirements to become a delivery driver?';
+                        break;
+                    case 'Payment':
+                        question = 'How much can I earn as a delivery driver?';
+                        break;
+                    case 'Vehicle':
+                        question = 'Do I need my own vehicle to be a delivery driver?';
+                        break;
+                    case 'Other':
+                        question = 'I have other questions about becoming a delivery driver.';
+                        break;
+                }
+                
+                if (isFirstMessage) {
+                    chatIntro.style.display = 'none';
+                    isFirstMessage = false;
+                }
+                
+                // Add user message to chat
+                addMessage('user', question);
+                
+                // Clear input field
+                userMessageInput.value = '';
+                
+                // Show typing indicator
+                showTypingIndicator();
+                
+                // Send message to backend
+                sendMessage(question);
+            });
+        });
+        
+        // Submit message from chat form
+        chatForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const message = userMessageInput.value.trim();
+            
+            if (message) {
+                if (isFirstMessage) {
+                    chatIntro.style.display = 'none';
+                    isFirstMessage = false;
+                }
+                
+                // Add user message to chat
+                addMessage('user', message);
+                
+                // Clear input field
+                userMessageInput.value = '';
+                
+                // Show typing indicator
+                showTypingIndicator();
+                
+                // Send message to backend
+                sendMessage(message);
+            }
+        });
+        
+        // Upload document
+        if (uploadForm) {
+            uploadForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const fileInput = document.getElementById('document');
+                const file = fileInput.files[0];
+                
+                if (file) {
+                    const formData = new FormData();
+                    formData.append('document', file);
+                    formData.append('session_id', sessionId);
+                    
+                    fetch('/chatbot/upload/', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            fileStatus.textContent = 'Document uploaded successfully!';
+                            fileStatus.className = 'status-success';
+                            setTimeout(() => {
+                                uploadModal.classList.remove('active');
+                            }, 2000);
+                        } else {
+                            fileStatus.textContent = data.error || 'Error uploading document.';
+                            fileStatus.className = 'status-error';
+                        }
+                    })
+                    .catch(error => {
+                        fileStatus.textContent = 'Error uploading document: ' + error.message;
+                        fileStatus.className = 'status-error';
+                    });
+                }
+            });
+            
+            closeUploadModal.addEventListener('click', () => {
+                uploadModal.classList.remove('active');
+            });
+        }
+    }
+    
+    // Send message to the server
+    function sendMessage(message) {
+        fetch('/chatbot/send/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                message: message,
+                session_id: sessionId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Hide typing indicator
+            hideTypingIndicator();
+            
+            // Add assistant message to chat
+            if (data.success) {
+                addMessage('assistant', data.response);
+            } else {
+                addMessage('assistant', 'Sorry, I encountered an error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            hideTypingIndicator();
+            addMessage('assistant', 'Sorry, I encountered an error: ' + error.message);
+        });
+    }
+    
+    // Add message to chat
+    function addMessage(role, content) {
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('message', `${role}-message`);
+        
+        const textDiv = document.createElement('div');
+        textDiv.classList.add('message-text');
+        textDiv.textContent = content;
+        
+        const timeDiv = document.createElement('div');
+        timeDiv.classList.add('message-time');
+        const now = new Date();
+        timeDiv.textContent = now.getHours() + ':' + (now.getMinutes() < 10 ? '0' : '') + now.getMinutes();
+        
+        messageDiv.appendChild(textDiv);
+        messageDiv.appendChild(timeDiv);
+        
+        // Insert before typing indicator
+        chatMessages.insertBefore(messageDiv, typingIndicator);
+        
+        scrollToBottom();
+    }
+    
+    // Show typing indicator
+    function showTypingIndicator() {
+        typingIndicator.style.display = 'block';
+        scrollToBottom();
+    }
+    
+    // Hide typing indicator
+    function hideTypingIndicator() {
+        typingIndicator.style.display = 'none';
+    }
+    
+    // Scroll to bottom of chat
+    function scrollToBottom() {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Initialize the chat
+    initChat();
+  });
+</script>
+{% endblock %}

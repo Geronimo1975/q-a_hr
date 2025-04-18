@@ -1,0 +1,713 @@
+Telekom-Style Chatbot Implementation for DeliveryDriverPortal
+This prompt provides detailed instructions to transform your existing chatbot into a professional Telekom-style chatbot with topic buttons and a modern floating interface.
+Redesign Objectives
+Transform the current chatbot implementation into a sleek, professional chat interface with:
+
+Floating Chat Window Design - Create a floating chat widget in the bottom-right corner that can be minimized/maximized
+Telekom Brand Styling - Implement the magenta color scheme (#E20074) with clean, modern aesthetics
+Topic Selection Buttons - Add clickable topic buttons for frequently asked questions
+Improved User Experience - Enhanced message styling, typing indicators, and smooth animations
+
+Implementation Steps
+1. UI Structure Changes
+Update the chat HTML structure to match the Telekom-style:
+html<div class="chat-widget" id="chat-widget">
+  <!-- Chat Header -->
+  <div class="chat-widget-header">
+    <h3 class="chat-widget-title">Delivery Driver Assistant</h3>
+    <div class="chat-widget-controls">
+      <button class="chat-control-button" id="minimize-chat">–</button>
+      <button class="chat-control-button" id="close-chat">×</button>
+    </div>
+  </div>
+  
+  <!-- Introduction Card (shown on first load) -->
+  <div class="chat-intro" id="chat-intro">
+    <div class="assistant-avatar">
+      <img src="{% static 'img/assistant-avatar.png' %}" alt="Assistant">
+    </div>
+    <h4>Welcome to our Driver Recruitment Assistant</h4>
+    <p>I can help answer questions about the application process, requirements, compensation, scheduling, and other related topics.</p>
+    <p class="disclaimer">Many of my answers are generated with the help of artificial intelligence. I might make mistakes sometimes!</p>
+  </div>
+  
+  <!-- Chat Messages Area -->
+  <div class="chat-messages" id="chat-messages">
+    <!-- Messages will be inserted here dynamically -->
+    <div class="typing-indicator" id="typing-indicator">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+  
+  <!-- Topic Selection Buttons -->
+  <div class="topic-buttons">
+    <button class="topic-button" data-topic="Application">Application</button>
+    <button class="topic-button" data-topic="Requirements">Requirements</button>
+    <button class="topic-button" data-topic="Payment">Payment</button>
+    <button class="topic-button" data-topic="Vehicle">Vehicle</button>
+    <button class="topic-button" data-topic="Other">Other</button>
+  </div>
+  
+  <!-- Chat Input Area -->
+  <div class="chat-input">
+    <form id="chat-form">
+      <input type="text" id="user-message" placeholder="Type your message here..." autocomplete="off">
+      <button type="submit">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Chat launcher button (visible when chat is minimized) -->
+<button class="chat-launcher" id="chat-launcher">
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+</button>
+
+<!-- File upload modal -->
+<div class="upload-modal" id="upload-modal">
+  <div class="upload-modal-content">
+    <div class="upload-modal-header">
+      <h3>Upload Document</h3>
+      <button id="close-upload-modal">×</button>
+    </div>
+    <div class="upload-modal-body">
+      <p>Upload PDF documents to enhance the AI assistant's knowledge base.</p>
+      <form id="upload-form" enctype="multipart/form-data">
+        <input type="file" id="document" name="document" accept=".pdf">
+        <button type="submit" class="upload-button">Upload Document</button>
+      </form>
+      <div id="file-status"></div>
+    </div>
+  </div>
+</div>
+2. CSS Styling (Telekom Brand)
+Add these styles to create the Telekom look and feel:
+css:root {
+  --telekom-magenta: #E20074;
+  --telekom-magenta-light: #f50082;
+  --telekom-gray: #f0f0f0;
+  --telekom-dark: #262626;
+  --chat-width: 380px;
+  --chat-height: 580px;
+}
+
+/* Chat Widget Container */
+.chat-widget {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: var(--chat-width);
+  height: var(--chat-height);
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 5px 25px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+  transition: all 0.3s ease;
+}
+
+.chat-widget.minimized {
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Chat Header */
+.chat-widget-header {
+  background-color: var(--telekom-magenta);
+  color: white;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chat-widget-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.chat-widget-controls {
+  display: flex;
+  gap: 15px;
+}
+
+.chat-control-button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+/* Chat Messages Area */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: #f9f9f9;
+}
+
+.message {
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  position: relative;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.user-message {
+  background-color: var(--telekom-magenta);
+  color: white;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+
+.assistant-message {
+  background-color: white;
+  color: var(--telekom-dark);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.message-time {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 5px;
+  text-align: right;
+}
+
+/* Typing Indicator */
+.typing-indicator {
+  display: none;
+  align-self: flex-start;
+  background-color: white;
+  border-radius: 18px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.typing-indicator span {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: var(--telekom-magenta);
+  border-radius: 50%;
+  animation: pulse 1.2s infinite ease-in-out;
+  margin-right: 3px;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+/* Topic Selection Buttons */
+.topic-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid #eee;
+  background-color: white;
+}
+
+.topic-button {
+  padding: 8px 12px;
+  border-radius: 18px;
+  border: 1px solid var(--telekom-magenta);
+  background: white;
+  color: var(--telekom-magenta);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.topic-button:hover {
+  background-color: var(--telekom-magenta);
+  color: white;
+}
+
+/* Chat Input Area */
+.chat-input {
+  padding: 12px;
+  background-color: white;
+  border-top: 1px solid #eee;
+}
+
+.chat-input form {
+  display: flex;
+  gap: 10px;
+}
+
+.chat-input input {
+  flex: 1;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 24px;
+  font-size: 14px;
+  outline: none;
+}
+
+.chat-input input:focus {
+  border-color: var(--telekom-magenta);
+}
+
+.chat-input button {
+  background-color: var(--telekom-magenta);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.chat-input button:hover {
+  background-color: var(--telekom-magenta-light);
+}
+
+.chat-input button svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Chat Launcher Button */
+.chat-launcher {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: var(--telekom-magenta);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  z-index: 999;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.chat-launcher:hover {
+  background-color: var(--telekom-magenta-light);
+}
+
+.chat-launcher.hidden {
+  display: none;
+}
+
+/* Chat Introduction */
+.chat-intro {
+  padding: 20px;
+  text-align: center;
+  background-color: white;
+}
+
+.assistant-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  margin: 0 auto 15px;
+  overflow: hidden;
+  background-color: var(--telekom-magenta);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.assistant-avatar img {
+  width: 100%;
+  height: auto;
+}
+
+.chat-intro h4 {
+  margin-bottom: 10px;
+  color: var(--telekom-dark);
+}
+
+.chat-intro p {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.chat-intro .disclaimer {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+}
+
+/* Upload Document Modal */
+.upload-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1001;
+  align-items: center;
+  justify-content: center;
+}
+
+.upload-modal.active {
+  display: flex;
+}
+
+.upload-modal-content {
+  background-color: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  overflow: hidden;
+}
+
+.upload-modal-header {
+  background-color: var(--telekom-magenta);
+  color: white;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.upload-modal-header button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.upload-modal-body {
+  padding: 20px;
+}
+
+.upload-button {
+  background-color: var(--telekom-magenta);
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 24px;
+  margin-top: 15px;
+  cursor: pointer;
+}
+
+#file-status {
+  margin-top: 15px;
+  padding: 10px;
+  border-radius: 4px;
+}
+
+.status-success {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-error {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+/* Responsive Design */
+@media (max-width: 576px) {
+  .chat-widget {
+    width: 100%;
+    height: 100%;
+    bottom: 0;
+    right: 0;
+    border-radius: 0;
+  }
+  
+  .chat-launcher {
+    bottom: 15px;
+    right: 15px;
+  }
+}
+3. JavaScript Implementation
+Update the JavaScript to handle the new UI elements:
+javascriptdocument.addEventListener('DOMContentLoaded', function() {
+    // DOM Elements
+    const chatWidget = document.getElementById('chat-widget');
+    const chatLauncher = document.getElementById('chat-launcher');
+    const minimizeButton = document.getElementById('minimize-chat');
+    const closeButton = document.getElementById('close-chat');
+    const chatMessages = document.getElementById('chat-messages');
+    const chatForm = document.getElementById('chat-form');
+    const userMessageInput = document.getElementById('user-message');
+    const typingIndicator = document.getElementById('typing-indicator');
+    const uploadForm = document.getElementById('upload-form');
+    const fileStatus = document.getElementById('file-status');
+    const uploadModal = document.getElementById('upload-modal');
+    const closeUploadModal = document.getElementById('close-upload-modal');
+    const sessionId = '{{ session_id }}';
+    
+    // Initialize Chat
+    function initChat() {
+        // Toggle chat visibility
+        chatLauncher.addEventListener('click', () => {
+            chatWidget.classList.remove('minimized');
+            chatLauncher.classList.add('hidden');
+            scrollToBottom();
+        });
+        
+        minimizeButton.addEventListener('click', () => {
+            chatWidget.classList.add('minimized');
+            chatLauncher.classList.remove('hidden');
+        });
+        
+        closeButton.addEventListener('click', () => {
+            chatWidget.classList.add('minimized');
+            chatLauncher.classList.remove('hidden');
+        });
+        
+        // Handle topic button clicks
+        document.querySelectorAll('.topic-button').forEach(button => {
+            button.addEventListener('click', function() {
+                const topic = this.dataset.topic;
+                let question = '';
+                
+                switch(topic) {
+                    case 'Application':
+                        question = 'How do I apply to become a delivery driver?';
+                        break;
+                    case 'Requirements':
+                        question = 'What are the requirements to become a delivery driver?';
+                        break;
+                    case 'Payment':
+                        question = 'How much can I earn as a delivery driver?';
+                        break;
+                    case 'Vehicle':
+                        question = 'Do I need my own vehicle?';
+                        break;
+                    case 'Other':
+                        question = 'What areas do you service?';
+                        break;
+                }
+                
+                userMessageInput.value = question;
+                chatForm.dispatchEvent(new Event('submit'));
+            });
+        });
+        
+        // Document upload modal
+        document.getElementById('upload-document-btn').addEventListener('click', () => {
+            uploadModal.classList.add('active');
+        });
+        
+        closeUploadModal.addEventListener('click', () => {
+            uploadModal.classList.remove('active');
+        });
+        
+        // Scroll to latest message
+        scrollToBottom();
+    }
+    
+    // Scroll chat to bottom
+    function scrollToBottom() {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    // Add message to chat
+    function addMessage(content, role, timestamp = null) {
+        const messageEl = document.createElement('div');
+        messageEl.classList.add('message');
+        
+        if (role === 'user') {
+            messageEl.classList.add('user-message');
+            messageEl.textContent = content;
+        } else if (role === 'assistant') {
+            messageEl.classList.add('assistant-message');
+            messageEl.innerHTML = content.replace(/\n/g, '<br>');
+        } else if (role === 'system') {
+            messageEl.classList.add('system-message');
+            messageEl.textContent = content;
+        }
+        
+        // Add timestamp
+        const timeEl = document.createElement('div');
+        timeEl.classList.add('message-time');
+        
+        if (timestamp) {
+            const date = new Date(timestamp);
+            timeEl.textContent = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        } else {
+            timeEl.textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        }
+        
+        messageEl.appendChild(timeEl);
+        
+        // Insert before typing indicator
+        chatMessages.insertBefore(messageEl, typingIndicator);
+        scrollToBottom();
+    }
+    
+    // Show typing indicator
+    function showTypingIndicator() {
+        typingIndicator.style.display = 'block';
+        scrollToBottom();
+    }
+    
+    // Hide typing indicator
+    function hideTypingIndicator() {
+        typingIndicator.style.display = 'none';
+    }
+    
+    // Send message to API
+    async function sendMessage(message) {
+        addMessage(message, 'user');
+        showTypingIndicator();
+        
+        try {
+            const response = await fetch('/chat/api/send_message/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: message,
+                    session_id: sessionId
+                })
+            });
+            
+            const data = await response.json();
+            hideTypingIndicator();
+            
+            if (data.success) {
+                addMessage(data.message, 'assistant', data.timestamp);
+            } else {
+                addMessage(data.error || 'Sorry, I encountered an error processing your request.', 'system');
+            }
+        } catch (error) {
+            hideTypingIndicator();
+            addMessage('Sorry, there was a network error. Please try again.', 'system');
+            console.error('Error sending message:', error);
+        }
+    }
+    
+    // Handle chat form submission
+    chatForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const message = userMessageInput.value.trim();
+        if (!message) return;
+        
+        userMessageInput.value = '';
+        sendMessage(message);
+    });
+    
+    // Handle file upload
+    uploadForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const fileInput = document.getElementById('document');
+        if (!fileInput.files.length) {
+            showFileStatus('Please select a file', false);
+            return;
+        }
+        
+        const file = fileInput.files[0];
+        if (!file.name.toLowerCase().endsWith('.pdf')) {
+            showFileStatus('Only PDF files are allowed', false);
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('document', file);
+        
+        showFileStatus('Uploading document...', true);
+        
+        try {
+            const response = await fetch('/chat/api/upload_document/', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                showFileStatus('Document uploaded successfully: ' + file.name, true);
+                uploadModal.classList.remove('active');
+                addMessage(`Document uploaded: ${file.name}`, 'system');
+            } else {
+                showFileStatus(data.error || 'Error uploading document', false);
+            }
+        } catch (error) {
+            showFileStatus('Network error during upload', false);
+            console.error('Error uploading document:', error);
+        }
+    });
+    
+    // Show file status
+    function showFileStatus(message, isSuccess) {
+        fileStatus.textContent = message;
+        fileStatus.style.display = 'block';
+        
+        fileStatus.className = isSuccess ? 'status-success' : 'status-error';
+        
+        setTimeout(() => {
+            fileStatus.style.display = 'none';
+        }, 5000);
+    }
+    
+    // Initialize the chat interface
+    initChat();
+});
+4. Backend Adjustments
+Ensure your existing views support the new UI without major changes. The key endpoints:
+
+/chat/api/send_message/ - Handles sending messages to OpenAI and returning responses
+/chat/api/upload_document/ - Handles PDF document uploads
+
+5. Multi-language Support Integration
+Add language detection to your OpenAI prompt to ensure the chatbot responds in the correct language:
+python# In your ChatbotService class or equivalent
+def send_message(self, session, message_text, language_code='de'):
+    """
+    Send a user message and get the AI response in the appropriate language
+    """
+    # Add language instruction to system message
+    language_instructions = {
+        'de': "Respond in German.",
+        'en': "Respond in English.",
+        'fr': "Respond in French.",
+        # Add other languages as needed
+    }
+    
+    language_instruction = language_instructions.get(language_code, "Respond in German.")Retry
+        
+            
+            
+            
+            
+        
+        Claude hit the max length for a message and has paused its response. You can write Continue to keep the chat going.GS

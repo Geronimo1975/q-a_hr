@@ -1,0 +1,383 @@
+# Admin Document Management for ChatGPT Fine-tuning
+
+## Important Addition: Admin Document Management
+
+Add a secure admin interface for document management that will be used for ChatGPT fine-tuning, with the following features:
+
+### 1. Admin-Only Document Upload Interface
+
+Create a dedicated section in the admin dashboard for document management:
+
+```python
+# In admin.py
+from django.contrib import admin
+from .models import ChatSession, ChatMessage, TrainingDocument
+
+@admin.register(TrainingDocument)
+class TrainingDocumentAdmin(admin.ModelAdmin):
+    list_display = ('title', 'document_type', 'uploaded_at', 'is_processed_for_training')
+    list_filter = ('document_type', 'is_processed_for_training')
+    search_fields = ('title', 'description')
+    readonly_fields = ('uploaded_at',)
+    
+    def save_model(self, request, obj, form, change):
+        """Process document for fine-tuning after save"""
+        super().save_model(request, obj, form, change)
+        # Queue document for processing
+        from .tasks import process_document_for_training
+        process_document_for_training.delay(obj.id)
+```
+
+### 2. Document Processing for Fine-tuning
+
+Add models to support document management and fine-tuning:
+
+```python
+# In models.py
+class TrainingDocument(models.Model):
+    DOCUMENT_TYPES = (
+        ('policy', 'Policy Document'),
+        ('faq', 'FAQ Document'),
+        ('guide', 'Training Guide'),
+        ('script', 'Conversation Script'),
+    )
+    
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    document_type = models.CharField(max_length=20, choices=DOCUMENT_TYPES)
+    file = models.FileField(upload_to='training_documents/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    is_processed_for_training = models.BooleanField(default=False)
+    
+    def __str__(self):
+        return self.title
+        
+class TrainingExample(models.Model):
+    """Individual training examples extracted from documents"""
+    source_document = models.ForeignKey(TrainingDocument, on_delete=models.CASCADE, related_name='training_examples')
+    question = models.TextField()
+    answer = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"Example from {self.source_document.title}"
+```
+
+### 3. Document Processing Backend
+
+Create a background task to process uploaded documents:
+
+```python
+# In tasks.py (using Celery or similar)
+from celery import shared_task
+from .models import TrainingDocument, TrainingExample
+from .document_processor import DocumentProcessor
+
+@shared_task
+def process_document_for_training(document_id):
+    """Process uploaded document and extract training examples"""
+    try:
+        document = TrainingDocument.objects.get(id=document_id)
+        processor = DocumentProcessor()
+        
+        # Extract text from document
+        text = processor.extract_text_from_document(document.file.path)
+        
+        # Process based on document type
+        if document.document_type == 'faq':
+            # Extract Q&A pairs from FAQ document
+            qa_pairs = processor.extract_qa_pairs(text)
+            for question, answer in qa_pairs:
+                TrainingExample.objects.create(
+                    source_document=document,
+                    question=question,
+                    answer=answer
+                )
+        elif document.document_type == 'policy':
+            # Extract policy statements and create examples
+            statements = processor.extract_policy_statements(text)
+            for statement in statements:
+                # Create examples for common questions about this policy
+                TrainingExample.objects.create(
+                    source_document=document,
+                    question=f"What is your policy on {statement.topic}?",
+                    answer=statement.content
+                )
+        # Add other document type processing as needed
+        
+        # Mark document as processed
+        document.is_processed_for_training = True
+        document.save()
+        
+        # Generate fine-tuning file if needed
+        create_fine_tuning_file()
+    except Exception as e:
+        print(f"Error processing document {document_id}: {e}")
+        # Log error or send notification
+```
+
+### 4. Admin Interface for Fine-tuning Management
+
+Add an interface to review and manage training examples:
+
+```python
+@admin.register(TrainingExample)
+class TrainingExampleAdmin(admin.ModelAdmin):
+    list_display = ('source_document', 'question_preview', 'created_at')
+    list_filter = ('source_document__document_type', 'created_at')
+    search_fields = ('question', 'answer')
+    
+    def question_preview(self, obj):
+        return obj.question[:50] + '...' if len(obj.question) > 50 else obj.question
+    question_preview.short_description = 'Question'
+    
+    fieldsets = (
+        (None, {
+            'fields': ('source_document',)
+        }),
+        ('Training Example', {
+            'fields': ('question', 'answer'),
+            'classes': ('wide',)
+        }),
+    )
+```
+
+### 5. Fine-tuning Workflow Integration
+
+Add functionality to generate fine-tuning files for OpenAI:
+
+```python
+# In fine_tuning.py
+import json
+import os
+from django.conf import settings
+from .models import TrainingExample
+
+def create_fine_tuning_file():
+    """Generate JSONL file for OpenAI fine-tuning"""
+    examples = TrainingExample.objects.all()
+    
+    fine_tuning_data = []
+    for example in examples:
+        fine_tuning_data.append({
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant for a delivery driver recruitment platform."},
+                {"role": "user", "content": example.question},
+                {"role": "assistant", "content": example.answer}
+            ]
+        })
+    
+    # Save to JSONL file
+    fine_tuning_file_path = os.path.join(settings.MEDIA_ROOT, 'fine_tuning_data.jsonl')
+    with open(fine_tuning_file_path, 'w') as f:
+        for item in fine_tuning_data:
+            f.write(json.dumps(item) + '\n')
+    
+    return fine_tuning_file_path
+```
+
+### 6. Integration with OpenAI Fine-tuning API
+
+Add integration with OpenAI's fine-tuning API:
+
+```python
+# In fine_tuning.py
+import openai
+from django.conf import settings
+
+def submit_fine_tuning_job(file_path):
+    """Submit fine-tuning job to OpenAI"""
+    try:
+        openai.api_key = settings.OPENAI_API_KEY
+        
+        # Upload file
+        with open(file_path, 'rb') as f:
+            response = openai.File.create(
+                file=f,
+                purpose='fine-tune'
+            )
+        file_id = response.id
+        
+        # Create fine-tuning job
+        response = openai.FineTuningJob.create(
+            training_file=file_id,
+            model="gpt-3.5-turbo",  # or your preferred model
+        )
+        
+        # Store job ID for tracking
+        job_id = response.id
+        
+        return job_id
+    except Exception as e:
+        print(f"Error submitting fine-tuning job: {e}")
+        return None
+```
+
+### 7. Admin Fine-tuning Control Panel
+
+Add a custom admin view for managing fine-tuning jobs:
+
+```python
+# In admin.py
+from django.urls import path
+from django.contrib import admin
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from .fine_tuning import create_fine_tuning_file, submit_fine_tuning_job
+
+class ChatbotAdminSite(admin.AdminSite):
+    site_header = 'Delivery Driver Recruitment Admin'
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('fine-tuning/', self.admin_view(self.fine_tuning_view), name='fine-tuning'),
+        ]
+        return custom_urls + urls
+    
+    def fine_tuning_view(self, request):
+        if request.method == 'POST':
+            action = request.POST.get('action')
+            
+            if action == 'generate_file':
+                file_path = create_fine_tuning_file()
+                messages.success(request, f"Fine-tuning file generated: {file_path}")
+                
+            elif action == 'submit_job':
+                file_path = create_fine_tuning_file()
+                job_id = submit_fine_tuning_job(file_path)
+                
+                if job_id:
+                    messages.success(request, f"Fine-tuning job submitted. Job ID: {job_id}")
+                else:
+                    messages.error(request, "Failed to submit fine-tuning job")
+        
+        # Get training data statistics
+        from .models import TrainingExample, TrainingDocument
+        context = {
+            'total_documents': TrainingDocument.objects.count(),
+            'processed_documents': TrainingDocument.objects.filter(is_processed_for_training=True).count(),
+            'total_examples': TrainingExample.objects.count(),
+            'example_distribution': TrainingExample.objects.values('source_document__document_type').annotate(count=Count('id')),
+            'title': 'Fine-tuning Management',
+        }
+        
+        return render(request, 'admin/fine_tuning.html', context)
+
+# Replace default admin site
+admin_site = ChatbotAdminSite(name='chatbot_admin')
+```
+
+### 8. Admin Fine-tuning Template
+
+Create a template for the fine-tuning control panel:
+
+```html
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<div class="module">
+    <h2>ChatGPT Fine-tuning Management</h2>
+    
+    <div class="stats-panel">
+        <div class="stat-card">
+            <h3>Documents</h3>
+            <p class="stat-number">{{ total_documents }}</p>
+            <p class="stat-detail">{{ processed_documents }} processed</p>
+        </div>
+        
+        <div class="stat-card">
+            <h3>Training Examples</h3>
+            <p class="stat-number">{{ total_examples }}</p>
+        </div>
+    </div>
+    
+    <h3>Distribution by Document Type</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Document Type</th>
+                <th>Examples</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in example_distribution %}
+            <tr>
+                <td>{{ item.source_document__document_type }}</td>
+                <td>{{ item.count }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="action-panel">
+        <form method="post">
+            {% csrf_token %}
+            <h3>Fine-tuning Actions</h3>
+            <p class="help">Generate a fine-tuning file and submit it to OpenAI for training.</p>
+            
+            <div class="actions">
+                <button type="submit" name="action" value="generate_file" class="button">
+                    Generate Fine-tuning File
+                </button>
+                
+                <button type="submit" name="action" value="submit_job" class="button">
+                    Submit Fine-tuning Job
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .stats-panel {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    
+    .stat-card {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 15px;
+        min-width: 150px;
+    }
+    
+    .stat-number {
+        font-size: 24px;
+        font-weight: bold;
+        margin: 10px 0 5px;
+    }
+    
+    .stat-detail {
+        color: #666;
+    }
+    
+    .action-panel {
+        margin-top: 30px;
+        background: #f9f9f9;
+        padding: 20px;
+        border-radius: 4px;
+    }
+    
+    .actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+    }
+</style>
+{% endblock %}
+```
+
+This comprehensive document management system allows admin users to:
+
+1. Upload documents specifically for fine-tuning the chatbot
+2. Process different types of documents to extract training examples
+3. Review and edit the extracted examples
+4. Generate fine-tuning files
+5. Submit fine-tuning jobs to OpenAI
+6. Track document processing and fine-tuning progress
+
+The system handles all aspects of the fine-tuning workflow, from document upload through to model training, all within a secure admin interface.
