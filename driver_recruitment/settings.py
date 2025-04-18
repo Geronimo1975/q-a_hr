@@ -203,3 +203,7 @@ OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-3.5-turbo')
 
 # Google Translate API Configuration
 GOOGLE_TRANSLATE_API_KEY = os.environ.get('GOOGLE_TRANSLATE_API_KEY', '')
+
+# Translation settings
+TRANSLATIONS_FALLBACK_TO_GOOGLE = True  # Whether to use Google Translate for missing translations
+TRANSLATION_DEBUG = True  # Whether to log translation requests and responses
