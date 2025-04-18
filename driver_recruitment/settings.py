@@ -209,3 +209,14 @@ GOOGLE_TRANSLATE_API_KEY = os.environ.get('GOOGLE_TRANSLATE_API_KEY', '')
 # Translation settings
 TRANSLATIONS_FALLBACK_TO_GOOGLE = True  # Whether to use Google Translate for missing translations
 TRANSLATION_DEBUG = True  # Whether to log translation requests and responses
+
+# CSRF Settings
+CSRF_TRUSTED_ORIGINS = [
+    'https://fastdelivery.gtl-europe.de',
+    'http://fastdelivery.gtl-europe.de',
+    'https://*.replit.app',
+    'http://*.replit.app',
+]
+
+# Set this to False to disable the CSRF debug page
+CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'
