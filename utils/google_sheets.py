@@ -112,43 +112,62 @@ def update_sheet_with_answers(user, stage, sheet_id):
             question__stage__stage_number=stage
         ).order_by('question__order')
         
-        # Prepare data for Google Sheets
+        # Format timestamp in the DD/MM/YYYY HH:MM:SS format as shown in the example
+        timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        
+        # Prepare data for Google Sheets following the example format
         row_data = [
-            user.email,
-            f"{user.first_name} {user.last_name}",
-            f"Stage {stage}",
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            timestamp,                       # Marcaj de timp (Timestamp)
+            "Îmi exprim acordul cu privire la GDPR",  # GDPR Agreement
+            user.first_name,                 # Numele (First name)
+            user.last_name,                  # Prenumele (Last name)
+            "",                              # CNP (empty by default, will be filled if found)
+            "",                              # Domiciliu (Address - empty by default, will be filled if found)
+            user.phone_number,               # Număr de telefon (Phone number)
+            user.email,                      # Adresa de e-mail (Email)
+            f"Stage {stage}",                # Opțiunea primită (Option received - stage number)
+            "",                              # Țara de reședință (Country - empty by default, will be filled if found)
         ]
         
-        # Add each answer to the row with appropriate formatting
+        # Process each answer and update the relevant fields in row_data or add as new columns
         for answer in answers:
             question_type = answer.question.question_type
+            question_text = answer.question.question_text.lower()
             
-            if question_type == 'file' and answer.file_upload:
-                # For file uploads, include a link to the file
+            # Update existing columns based on question content
+            if 'cnp' in question_text or 'cod numeric personal' in question_text:
+                row_data[4] = answer.answer_text  # Update CNP field
+            elif 'adres' in question_text or 'domiciliu' in question_text:
+                row_data[5] = answer.answer_text  # Update Address field
+            elif 'țara' in question_text or 'tara' in question_text or 'country' in question_text:
+                row_data[9] = answer.answer_text  # Update Country field
+            elif question_type == 'file' and answer.file_upload:
+                # For file uploads, add a link to the file as a new column
                 if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
                     file_url = f"{settings.BASE_URL}{answer.file_upload.url}"
                 else:
-                    # If BASE_URL is not set, use a relative path with a note
-                    file_url = f"[FILE UPLOADED: {answer.file_upload.name}]"
+                    file_url = f"https://drive.google.com/file/d/{answer.file_upload.name}"
                 
-                row_data.append(f"{answer.question.question_text}: {file_url}")
-            elif question_type == 'dob' and answer.answer_text:
-                # Format date of birth in German format (DD.MM.YYYY)
-                try:
-                    from datetime import datetime
-                    date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
-                    formatted_date = date_obj.strftime('%d.%m.%Y')
-                    row_data.append(f"{answer.question.question_text}: {formatted_date}")
-                except:
-                    row_data.append(f"{answer.question.question_text}: {answer.answer_text}")
-            elif question_type == 'phone' and answer.answer_text:
-                # Format phone number for better readability
-                formatted_phone = answer.answer_text.replace('+49', '+49 ')
-                row_data.append(f"{answer.question.question_text}: {formatted_phone}")
+                row_data.append(file_url)  # Add file URL as a new column
             else:
-                # Standard formatting for other question types
-                row_data.append(f"{answer.question.question_text}: {answer.answer_text}")
+                # For other questions, check if they match existing columns
+                # If not, add them as new columns with question:answer format
+                if 'phone' in question_text or 'telefon' in question_text:
+                    formatted_phone = answer.answer_text.replace('+49', '+49 ')
+                    row_data[6] = formatted_phone  # Update Phone field
+                elif 'email' in question_text or 'e-mail' in question_text:
+                    row_data[7] = answer.answer_text  # Update Email field
+                else:
+                    # Add as a new column in format "Question: Answer"
+                    if question_type == 'dob' and answer.answer_text:
+                        try:
+                            date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
+                            formatted_date = date_obj.strftime('%d.%m.%Y')
+                            row_data.append(formatted_date)
+                        except:
+                            row_data.append(answer.answer_text)
+                    else:
+                        row_data.append(answer.answer_text)
         
         # Ensure the sheet exists first
         create_sheet_if_needed(sheet_id)
@@ -202,11 +221,11 @@ def create_sheet_if_needed(sheet_id):
                     }
                 })
         
-        # Add headers for each sheet
+        # Add headers for each sheet matching the example format
         headers = {
-            'Stage1': ['Email', 'Full Name', 'Stage', 'Timestamp', 'Responses...'],
-            'Stage2': ['Email', 'Full Name', 'Stage', 'Timestamp', 'Responses...'],
-            'Stage3': ['Email', 'Full Name', 'Stage', 'Timestamp', 'Responses...']
+            'Stage1': ['Marcaj de timp', 'GDPR Agreement', 'Numele', 'Prenumele', 'CNP (Cod Numeric Personal)', 'Domiciliul sau reședința', 'Număr de telefon', 'Adresa de E-mail', 'Opțiunea primită', 'Țara de reședință', 'Încărcare document'],
+            'Stage2': ['Marcaj de timp', 'GDPR Agreement', 'Numele', 'Prenumele', 'CNP (Cod Numeric Personal)', 'Domiciliul sau reședința', 'Număr de telefon', 'Adresa de E-mail', 'Opțiunea primită', 'Țara de reședință', 'Încărcare document'],
+            'Stage3': ['Marcaj de timp', 'GDPR Agreement', 'Numele', 'Prenumele', 'CNP (Cod Numeric Personal)', 'Domiciliul sau reședința', 'Număr de telefon', 'Adresa de E-mail', 'Opțiunea primită', 'Țara de reședință', 'Încărcare document']
         }
         
         # Execute batch updates if any
@@ -228,7 +247,7 @@ def create_sheet_if_needed(sheet_id):
                 if sheet_name in existing_sheets or sheet_name in needed_sheets:
                     sheets.values().update(
                         spreadsheetId=sheet_id,
-                        range=f"{sheet_name}!A1:E1",
+                        range=f"{sheet_name}!A1:K1",
                         valueInputOption='USER_ENTERED',
                         body={'values': [header]}
                     ).execute()
