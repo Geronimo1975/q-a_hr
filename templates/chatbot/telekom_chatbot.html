@@ -203,7 +203,7 @@
                     formData.append('document', file);
                     formData.append('session_id', sessionId);
                     
-                    fetch('/chatbot/upload/', {
+                    fetch('{% url 'chatbot:upload_document' %}', {
                         method: 'POST',
                         body: formData,
                         headers: {
@@ -238,7 +238,7 @@
     
     // Send message to the server
     function sendMessage(message) {
-        fetch('/chatbot/send/', {
+        fetch('{% url 'chatbot:send_message' %}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
