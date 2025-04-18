@@ -3,105 +3,197 @@
 {% block title %} - Dashboard{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-10 mx-auto">
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <h4 class="mb-0">Application Dashboard</h4>
-            </div>
-            <div class="card-body">
-                <h5>Welcome, {{ user.get_full_name }}!</h5>
-                <p>Application Status: <strong>{{ user.get_stage_status }}</strong></p>
-                
-                <div class="progress mb-4">
-                    {% if user.is_rejected %}
-                        <div class="progress-bar bg-danger" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">Application Rejected</div>
-                    {% else %}
-                        {% if user.application_stage == 0 %}
-                            <div class="progress-bar" role="progressbar" style="width: 25%;" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">Registration</div>
-                        {% elif user.application_stage == 1 %}
-                            <div class="progress-bar" role="progressbar" style="width: 50%;" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">Stage 1 Complete</div>
-                        {% elif user.application_stage == 2 %}
-                            <div class="progress-bar" role="progressbar" style="width: 75%;" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100">Stage 2 Complete</div>
-                        {% elif user.application_stage == 3 %}
-                            <div class="progress-bar bg-success" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">Application Complete</div>
-                        {% endif %}
-                    {% endif %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-md-10 mx-auto">
+            <div class="card shadow-lg mb-5" data-aos="fade-up">
+                <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">Application Dashboard</h4>
+                    <span class="badge bg-light text-primary">{{ user.get_stage_status }}</span>
                 </div>
-                
-                {% if user.is_rejected %}
-                    <div class="alert alert-danger">
-                        <h5>Your application has been rejected</h5>
-                        <p>Thank you for your interest in our delivery driver position. Unfortunately, your application will not proceed further.</p>
-                        <p>If you have any questions, please contact our recruitment team.</p>
-                    </div>
-                {% elif user.application_stage == 3 %}
-                    <div class="alert alert-success">
-                        <h5>Application Complete!</h5>
-                        <p>You have successfully completed all stages of your application. Our team will review your information and contact you soon.</p>
-                    </div>
-                {% else %}
-                    {% if next_stage %}
-                        <div class="alert alert-info">
-                            <h5>Next Step: {{ next_stage_name }}</h5>
-                            <p>Please complete the next stage of your application process.</p>
-                            <a href="{% url 'questionnaire' next_stage %}" class="btn btn-primary">
-                                Continue to {{ next_stage_name }}
-                            </a>
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="rounded-circle bg-light d-flex align-items-center justify-content-center me-3" style="width: 60px; height: 60px;">
+                            <i class="bi bi-person-circle fs-1 text-primary"></i>
                         </div>
-                    {% endif %}
-                {% endif %}
-            </div>
-        </div>
-        
-        {% if answers %}
-            <div class="card mb-4">
-                <div class="card-header bg-secondary text-white">
-                    <h4 class="mb-0">Your Application Responses</h4>
-                </div>
-                <div class="card-body">
-                    <div class="accordion" id="answersAccordion">
-                        {% for stage_num in "123"|make_list %}
-                            <div class="accordion-item">
-                                <h2 class="accordion-header" id="heading{{ stage_num }}">
-                                    <button class="accordion-button {% if stage_num|add:'0' > user.application_stage %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ stage_num }}" aria-expanded="{% if stage_num|add:'0' <= user.application_stage %}true{% else %}false{% endif %}" aria-controls="collapse{{ stage_num }}">
-                                        Stage {{ stage_num }} Responses
-                                    </button>
-                                </h2>
-                                <div id="collapse{{ stage_num }}" class="accordion-collapse collapse {% if stage_num|add:'0' <= user.application_stage %}show{% endif %}" aria-labelledby="heading{{ stage_num }}" data-bs-parent="#answersAccordion">
-                                    <div class="accordion-body">
-                                        {% if answers %}
-                                            <div class="table-responsive">
-                                                <table class="table table-striped">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Question</th>
-                                                            <th>Your Answer</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {% for answer in answers %}
-                                                            {% if answer.question.stage.stage_number|stringformat:"s" == stage_num %}
-                                                                <tr>
-                                                                    <td>{{ answer.question.question_text }}</td>
-                                                                    <td>{{ answer.answer_text }}</td>
-                                                                </tr>
-                                                            {% endif %}
-                                                        {% endfor %}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        {% else %}
-                                            <p>No responses for this stage yet.</p>
-                                        {% endif %}
+                        <div>
+                            <h5 class="mb-1">Welcome, {{ user.get_full_name }}!</h5>
+                            <p class="text-muted mb-0">Application ID: #{{ user.id }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="progress-container mb-5">
+                        <h6 class="mb-3">Application Progress</h6>
+                        <div class="progress" style="height: 25px;">
+                            {% if user.is_rejected %}
+                                <div class="progress-bar bg-danger" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                                    <i class="bi bi-x-circle me-2"></i> Application Rejected
+                                </div>
+                            {% else %}
+                                {% if user.application_stage == 0 %}
+                                    <div class="progress-bar bg-primary" role="progressbar" style="width: 25%;" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
+                                        <i class="bi bi-check-circle me-2"></i> Registration Complete (25%)
                                     </div>
+                                {% elif user.application_stage == 1 %}
+                                    <div class="progress-bar bg-primary" role="progressbar" style="width: 50%;" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">
+                                        <i class="bi bi-check-circle me-2"></i> Stage 1 Complete (50%)
+                                    </div>
+                                {% elif user.application_stage == 2 %}
+                                    <div class="progress-bar bg-primary" role="progressbar" style="width: 75%;" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100">
+                                        <i class="bi bi-check-circle me-2"></i> Stage 2 Complete (75%)
+                                    </div>
+                                {% elif user.application_stage == 3 %}
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                                        <i class="bi bi-check-circle me-2"></i> Application Complete (100%)
+                                    </div>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="application-status mb-4">
+                        {% if user.is_rejected %}
+                            <div class="alert alert-danger d-flex align-items-center" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+                                <div>
+                                    <h5>Your application has been rejected</h5>
+                                    <p class="mb-0">Thank you for your interest in our delivery driver position. Unfortunately, your application will not proceed further.</p>
+                                    <p class="mb-0">If you have any questions, please contact our recruitment team.</p>
                                 </div>
                             </div>
-                        {% endfor %}
+                        {% elif user.application_stage == 3 %}
+                            <div class="alert alert-success d-flex align-items-center" role="alert">
+                                <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+                                <div>
+                                    <h5>Application Complete!</h5>
+                                    <p class="mb-0">You have successfully completed all stages of your application. Our team will review your information and contact you soon.</p>
+                                </div>
+                            </div>
+                        {% else %}
+                            {% if next_stage %}
+                                <div class="alert alert-info d-flex align-items-center" role="alert">
+                                    <i class="bi bi-info-circle-fill fs-4 me-3"></i>
+                                    <div>
+                                        <h5>Next Step: {{ next_stage_name }}</h5>
+                                        <p class="mb-1">Please complete the next stage of your application process.</p>
+                                        <a href="{% url 'questionnaire' next_stage %}" class="btn btn-primary mt-2">
+                                            <i class="bi bi-arrow-right-circle me-2"></i> Continue to {{ next_stage_name }}
+                                        </a>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Application Timeline -->
+                    <div class="application-timeline mb-4">
+                        <h6 class="mb-3">Application Timeline</h6>
+                        <div class="timeline">
+                            <div class="timeline-item d-flex">
+                                <div class="timeline-marker bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
+                                    <i class="bi bi-check-lg"></i>
+                                </div>
+                                <div class="timeline-content ms-3 border-start ps-3 pb-4" style="border-color: #e5e5e5 !important;">
+                                    <h6 class="mb-1">Registration Complete</h6>
+                                    <p class="text-muted small mb-0">Personal details and contact information verified</p>
+                                </div>
+                            </div>
+                            
+                            <div class="timeline-item d-flex">
+                                <div class="timeline-marker {% if user.application_stage >= 1 %}bg-primary{% else %}bg-light{% endif %} text-{% if user.application_stage >= 1 %}white{% else %}muted{% endif %} rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
+                                    {% if user.application_stage >= 1 %}<i class="bi bi-check-lg"></i>{% else %}1{% endif %}
+                                </div>
+                                <div class="timeline-content ms-3 border-start ps-3 pb-4" style="border-color: #e5e5e5 !important;">
+                                    <h6 class="mb-1">Stage 1: Basic Qualifications</h6>
+                                    <p class="text-muted small mb-0">{% if user.application_stage >= 1 %}Completed on {{ user.created_at|date:"F d, Y" }}{% else %}Pending completion{% endif %}</p>
+                                </div>
+                            </div>
+                            
+                            <div class="timeline-item d-flex">
+                                <div class="timeline-marker {% if user.application_stage >= 2 %}bg-primary{% else %}bg-light{% endif %} text-{% if user.application_stage >= 2 %}white{% else %}muted{% endif %} rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
+                                    {% if user.application_stage >= 2 %}<i class="bi bi-check-lg"></i>{% else %}2{% endif %}
+                                </div>
+                                <div class="timeline-content ms-3 border-start ps-3 pb-4" style="border-color: #e5e5e5 !important;">
+                                    <h6 class="mb-1">Stage 2: Detailed Assessment</h6>
+                                    <p class="text-muted small mb-0">{% if user.application_stage >= 2 %}Completed on {{ user.created_at|date:"F d, Y" }}{% else %}Pending completion{% endif %}</p>
+                                </div>
+                            </div>
+                            
+                            <div class="timeline-item d-flex">
+                                <div class="timeline-marker {% if user.application_stage >= 3 %}bg-success{% else %}bg-light{% endif %} text-{% if user.application_stage >= 3 %}white{% else %}muted{% endif %} rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
+                                    {% if user.application_stage >= 3 %}<i class="bi bi-check-lg"></i>{% else %}3{% endif %}
+                                </div>
+                                <div class="timeline-content ms-3 border-start ps-3" style="border-color: #e5e5e5 !important;">
+                                    <h6 class="mb-1">Stage 3: Final Qualification</h6>
+                                    <p class="text-muted small mb-0">{% if user.application_stage >= 3 %}Completed on {{ user.created_at|date:"F d, Y" }}{% else %}Pending completion{% endif %}</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        {% endif %}
+            
+            {% if answers %}
+                <div class="card shadow-lg mb-4" data-aos="fade-up" data-aos-delay="100">
+                    <div class="card-header bg-secondary text-white py-3">
+                        <h4 class="mb-0">Your Application Responses</h4>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="accordion" id="answersAccordion">
+                            {% for stage_num in "123"|make_list %}
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header" id="heading{{ stage_num }}">
+                                        <button class="accordion-button {% if stage_num|add:'0' > user.application_stage %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ stage_num }}" aria-expanded="{% if stage_num|add:'0' <= user.application_stage %}true{% else %}false{% endif %}" aria-controls="collapse{{ stage_num }}">
+                                            <i class="bi bi-clipboard-check me-2"></i> Stage {{ stage_num }} Responses
+                                        </button>
+                                    </h2>
+                                    <div id="collapse{{ stage_num }}" class="accordion-collapse collapse {% if stage_num|add:'0' <= user.application_stage %}show{% endif %}" aria-labelledby="heading{{ stage_num }}" data-bs-parent="#answersAccordion">
+                                        <div class="accordion-body">
+                                            {% if answers %}
+                                                <div class="table-responsive">
+                                                    <table class="table table-striped">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Question</th>
+                                                                <th>Your Answer</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {% for answer in answers %}
+                                                                {% if answer.question.stage.stage_number|stringformat:"s" == stage_num %}
+                                                                    <tr>
+                                                                        <td>{{ answer.question.question_text }}</td>
+                                                                        <td>{{ answer.answer_text }}</td>
+                                                                    </tr>
+                                                                {% endif %}
+                                                            {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            {% else %}
+                                                <p>No responses for this stage yet.</p>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            <div class="card shadow-lg mt-4" data-aos="fade-up" data-aos-delay="200">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-question-circle-fill fs-1 text-primary me-3"></i>
+                        <div>
+                            <h5 class="mb-1">Need Help?</h5>
+                            <p class="mb-0">If you have any questions about your application or the recruitment process, please contact our support team at <a href="mailto:support@driverrecruitment.com">support@driverrecruitment.com</a></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

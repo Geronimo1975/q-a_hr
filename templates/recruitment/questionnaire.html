@@ -4,44 +4,146 @@
 {% block title %} - {{ stage_name }}{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-8 mx-auto">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h4 class="mb-0">{{ stage_name }}</h4>
-            </div>
-            <div class="card-body">
-                <div class="progress mb-4">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: {{ stage|mul:33 }}%;" aria-valuenow="{{ stage|mul:33 }}" aria-valuemin="0" aria-valuemax="100">Stage {{ stage }}</div>
-                </div>
-                
-                <form method="post">
-                    {% csrf_token %}
-                    {{ form|crispy }}
-                    
-                    <div class="d-grid gap-2 mt-4">
-                        <button class="btn btn-primary" type="submit">Submit and Continue</button>
-                        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Save and Continue Later</a>
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <!-- Stage Progress Indicator -->
+            <div class="stage-progress mb-4" data-aos="fade-up">
+                <div class="d-flex justify-content-between position-relative mb-1">
+                    <div class="stage-dot {% if stage >= 1 %}active{% endif %}">
+                        <span class="position-absolute top-0 start-0 translate-middle badge rounded-pill bg-{% if stage >= 1 %}primary{% else %}secondary{% endif %}" style="width: 40px; height: 40px; line-height: 30px;">
+                            {% if stage > 1 %}<i class="bi bi-check-lg"></i>{% else %}1{% endif %}
+                        </span>
                     </div>
-                </form>
+                    <div class="stage-dot {% if stage >= 2 %}active{% endif %}">
+                        <span class="position-absolute top-0 start-50 translate-middle badge rounded-pill bg-{% if stage >= 2 %}primary{% else %}secondary{% endif %}" style="width: 40px; height: 40px; line-height: 30px;">
+                            {% if stage > 2 %}<i class="bi bi-check-lg"></i>{% else %}2{% endif %}
+                        </span>
+                    </div>
+                    <div class="stage-dot {% if stage >= 3 %}active{% endif %}">
+                        <span class="position-absolute top-0 end-0 translate-middle badge rounded-pill bg-{% if stage >= 3 %}primary{% else %}secondary{% endif %}" style="width: 40px; height: 40px; line-height: 30px;">
+                            3
+                        </span>
+                    </div>
+                    <div class="progress position-absolute w-100 top-50" style="height: 2px; transform: translateY(-50%);">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: {{ stage|mul:33 }}%;" aria-valuenow="{{ stage|mul:33 }}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between mt-4">
+                    <div class="text-center">
+                        <h6 class="mb-0 small">Basic<br>Qualifications</h6>
+                    </div>
+                    <div class="text-center">
+                        <h6 class="mb-0 small">Detailed<br>Assessment</h6>
+                    </div>
+                    <div class="text-center">
+                        <h6 class="mb-0 small">Final<br>Qualification</h6>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-lg" data-aos="fade-up">
+                <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">{{ stage_name }}</h4>
+                    <span class="badge bg-light text-primary">Stage {{ stage }} of 3</span>
+                </div>
+                <div class="card-body p-4">
+                    <div class="alert alert-info d-flex" role="alert">
+                        <i class="bi bi-info-circle-fill fs-4 me-3"></i>
+                        <div>
+                            <h5 class="alert-heading">Important Information</h5>
+                            <p class="mb-0">Please fill out all required fields marked with an asterisk (*). Your progress will be saved when you submit the form.</p>
+                        </div>
+                    </div>
+                    
+                    <form method="post" class="mt-4">
+                        {% csrf_token %}
+                        {{ form|crispy }}
+                        
+                        <div class="d-flex justify-content-between mt-5">
+                            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-2"></i> Return to Dashboard
+                            </a>
+                            <button class="btn btn-primary" type="submit">
+                                Submit and Continue <i class="bi bi-arrow-right ms-2"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Help Card -->
+            <div class="card shadow-lg mt-4" data-aos="fade-up" data-aos-delay="100">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-question-circle-fill fs-1 text-primary me-3"></i>
+                        <div>
+                            <h5 class="mb-1">Need Help?</h5>
+                            <p class="mb-0">If you have any questions about this stage, please contact our support team at <a href="mailto:support@driverrecruitment.com">support@driverrecruitment.com</a></p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .stage-dot {
+        position: relative;
+        z-index: 1;
+        background-color: #fff;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+    }
+</style>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    // Auto-save functionality for form (optional)
+    // Auto-save functionality for form
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.querySelector('form');
         
         // Add event listener to save form data periodically
         const formElements = form.querySelectorAll('input, select, textarea');
+        let autoSaveTimeout;
+        
         formElements.forEach(element => {
             element.addEventListener('change', function() {
-                // Could implement auto-save functionality here
-                console.log('Form data changed, could auto-save here');
+                clearTimeout(autoSaveTimeout);
+                autoSaveTimeout = setTimeout(function() {
+                    // Show a subtle "saving" indicator
+                    const saveIndicator = document.createElement('div');
+                    saveIndicator.className = 'position-fixed bottom-0 end-0 p-3';
+                    saveIndicator.style.zIndex = '1050';
+                    saveIndicator.innerHTML = `
+                        <div class="toast align-items-center text-white bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                            <div class="d-flex">
+                                <div class="toast-body">
+                                    <i class="bi bi-check-circle me-2"></i> Progress saved automatically
+                                </div>
+                                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                            </div>
+                        </div>
+                    `;
+                    document.body.appendChild(saveIndicator);
+                    
+                    // Initialize and show the toast
+                    const toastElement = saveIndicator.querySelector('.toast');
+                    const toast = new bootstrap.Toast(toastElement, {
+                        delay: 2000
+                    });
+                    toast.show();
+                    
+                    // Auto-remove after it's hidden
+                    toastElement.addEventListener('hidden.bs.toast', function() {
+                        saveIndicator.remove();
+                    });
+                    
+                    console.log('Form data auto-saved');
+                }, 1000);
             });
         });
     });

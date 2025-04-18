@@ -3,19 +3,133 @@
 {% block title %} - Application Complete{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-8 mx-auto text-center">
-        <div class="card">
-            <div class="card-body">
-                <i class="fas fa-check-circle text-success mb-4" style="font-size: 5rem;"></i>
-                <h2 class="mb-3">Application Complete!</h2>
-                <p class="lead">Thank you for completing your application for the delivery driver position.</p>
-                <hr>
-                <p>Our team will review your information and contact you soon with the next steps.</p>
-                <p>In the meantime, you can track your application status in your dashboard.</p>
-                <a href="{% url 'dashboard' %}" class="btn btn-primary mt-3">Go to Dashboard</a>
+<div class="container py-5">
+    <div class="row">
+        <div class="col-md-8 mx-auto text-center">
+            <div class="card shadow-lg" data-aos="zoom-in">
+                <div class="card-body p-5">
+                    <div class="success-animation mb-4">
+                        <div class="checkmark-circle">
+                            <div class="checkmark-circle-bg"></div>
+                            <div class="checkmark draw"></div>
+                        </div>
+                    </div>
+                    
+                    <h2 class="display-5 fw-bold mb-3 text-success">Application Complete!</h2>
+                    <p class="lead mb-4">Thank you for completing your application for the delivery driver position.</p>
+                    
+                    <div class="alert alert-success d-inline-block px-4 py-3 mb-4">
+                        <i class="bi bi-clock"></i> Your application has been successfully submitted and is now under review.
+                    </div>
+                    
+                    <div class="card mb-4 border-0 bg-light">
+                        <div class="card-body">
+                            <h5 class="mb-3">What happens next?</h5>
+                            <div class="d-flex align-items-start mb-3">
+                                <div class="step-number bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 30px; height: 30px; flex-shrink: 0;">1</div>
+                                <div class="text-start">Our team will review your application within 3-5 business days</div>
+                            </div>
+                            <div class="d-flex align-items-start mb-3">
+                                <div class="step-number bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 30px; height: 30px; flex-shrink: 0;">2</div>
+                                <div class="text-start">You'll receive an email notification about your application status</div>
+                            </div>
+                            <div class="d-flex align-items-start">
+                                <div class="step-number bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 30px; height: 30px; flex-shrink: 0;">3</div>
+                                <div class="text-start">Qualified candidates will be invited for the next steps in the recruitment process</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <p>In the meantime, you can track your application status in your dashboard.</p>
+                    <a href="{% url 'dashboard' %}" class="btn btn-primary btn-lg mt-3">
+                        <i class="bi bi-speedometer2 me-2"></i> Go to Dashboard
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Contact Card -->
+            <div class="card shadow-lg mt-4" data-aos="fade-up" data-aos-delay="200">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-envelope-paper-fill fs-1 text-primary me-3"></i>
+                        <div class="text-start">
+                            <h5 class="mb-1">Questions?</h5>
+                            <p class="mb-0">If you have any questions about your application, please contact our recruitment team at <a href="mailto:recruitment@driverrecruitment.com">recruitment@driverrecruitment.com</a></p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    /* Checkmark animation */
+    .checkmark-circle {
+        width: 150px;
+        height: 150px;
+        position: relative;
+        display: inline-block;
+        vertical-align: top;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    
+    .checkmark-circle-bg {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        background: #2ecc71;
+        position: absolute;
+    }
+    
+    .checkmark {
+        border-radius: 5px;
+    }
+    
+    .checkmark.draw:after {
+        animation-delay: 100ms;
+        animation-duration: 1s;
+        animation-timing-function: ease;
+        animation-name: checkmark;
+        transform: scaleX(-1) rotate(135deg);
+        animation-fill-mode: forwards;
+    }
+    
+    .checkmark:after {
+        opacity: 0;
+        height: 75px;
+        width: 37.5px;
+        transform-origin: left top;
+        border-right: 15px solid white;
+        border-top: 15px solid white;
+        content: '';
+        left: 25px;
+        top: 75px;
+        position: absolute;
+    }
+    
+    @keyframes checkmark {
+        0% {
+            height: 0;
+            width: 0;
+            opacity: 1;
+        }
+        20% {
+            height: 0;
+            width: 37.5px;
+            opacity: 1;
+        }
+        40% {
+            height: 75px;
+            width: 37.5px;
+            opacity: 1;
+        }
+        100% {
+            height: 75px;
+            width: 37.5px;
+            opacity: 1;
+        }
+    }
+</style>
 {% endblock %}

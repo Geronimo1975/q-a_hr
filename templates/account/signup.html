@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+
+{% block title %} - Register{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card shadow-lg" data-aos="fade-up">
+        <div class="card-header bg-primary text-white py-3">
+          <h3 class="card-title mb-0 text-center">{% trans "Become a Delivery Driver" %}</h3>
+        </div>
+        <div class="card-body p-4">
+          <p class="text-center mb-4">{% blocktrans %}Already have an account?
+            <a href="{{ login_url }}" class="text-primary">Sign in</a> instead.{% endblocktrans %}</p>
+
+          <form class="signup" id="signup_form" method="POST" action="{% url 'account_signup' %}">
+            {% csrf_token %}
+            {{ form|crispy }}
+            {% if redirect_field_value %}
+            <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+            {% endif %}
+            
+            <div class="d-grid gap-2 mt-4">
+              <button class="btn btn-primary btn-lg" type="submit">{% trans "Create Account & Start Application" %}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <div class="row mt-5" data-aos="fade-up" data-aos-delay="100">
+        <div class="col-md-4 mb-4">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+              <div class="feature-icon mb-3">
+                <i class="bi bi-shield-check"></i>
+              </div>
+              <h5>Secure Application</h5>
+              <p class="text-muted small">Your personal information is encrypted and securely stored</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4 mb-4">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+              <div class="feature-icon mb-3">
+                <i class="bi bi-hourglass-split"></i>
+              </div>
+              <h5>Quick Process</h5>
+              <p class="text-muted small">Complete your application in just 10-15 minutes</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4 mb-4">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+              <div class="feature-icon mb-3">
+                <i class="bi bi-headset"></i>
+              </div>
+              <h5>Support Available</h5>
+              <p class="text-muted small">Get help from our team throughout the process</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

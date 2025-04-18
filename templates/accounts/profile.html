@@ -4,54 +4,147 @@
 {% block title %} - Profile{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-8 mx-auto">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h4 class="mb-0">Your Profile</h4>
-            </div>
-            <div class="card-body">
-                <form method="post">
-                    {% csrf_token %}
-                    {{ form|crispy }}
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-primary" type="submit">Update Profile</button>
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-4 mb-4" data-aos="fade-up">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white py-3">
+                    <h4 class="mb-0">Your Profile</h4>
+                </div>
+                <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <div class="avatar-circle mx-auto mb-3">
+                            <i class="bi bi-person-circle text-primary" style="font-size: 5rem;"></i>
+                        </div>
+                        <h5>{{ user.get_full_name }}</h5>
+                        <p class="text-muted mb-0">{{ user.email }}</p>
+                        <p class="badge bg-primary mt-2">Driver Applicant</p>
                     </div>
-                </form>
+                    
+                    <div class="profile-info">
+                        <div class="d-flex mb-2">
+                            <div class="text-primary me-3"><i class="bi bi-telephone-fill"></i></div>
+                            <div>{{ user.phone_number }}</div>
+                        </div>
+                        <div class="d-flex mb-2">
+                            <div class="text-primary me-3"><i class="bi bi-calendar-check-fill"></i></div>
+                            <div>Joined {{ user.date_joined|date:"F d, Y" }}</div>
+                        </div>
+                        <div class="d-flex">
+                            <div class="text-primary me-3"><i class="bi bi-shield-check"></i></div>
+                            <div>GDPR Consent: {% if user.gdpr_consent %}Provided{% else %}Not Provided{% endif %}</div>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-
-        <div class="card mt-4">
-            <div class="card-header bg-info text-white">
-                <h4 class="mb-0">Application Status</h4>
-            </div>
-            <div class="card-body">
-                <p><strong>Current Status:</strong> {{ user.get_stage_status }}</p>
-                <div class="progress mb-3">
-                    {% if user.is_rejected %}
-                        <div class="progress-bar bg-danger" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">Application Rejected</div>
-                    {% else %}
-                        {% if user.application_stage == 0 %}
-                            <div class="progress-bar" role="progressbar" style="width: 25%;" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">Registration</div>
-                        {% elif user.application_stage == 1 %}
-                            <div class="progress-bar" role="progressbar" style="width: 50%;" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">Stage 1 Complete</div>
-                        {% elif user.application_stage == 2 %}
-                            <div class="progress-bar" role="progressbar" style="width: 75%;" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100">Stage 2 Complete</div>
-                        {% elif user.application_stage == 3 %}
-                            <div class="progress-bar bg-success" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">Application Complete</div>
-                        {% endif %}
+            
+            <!-- Application Status Card -->
+            <div class="card shadow-lg mt-4" data-aos="fade-up" data-aos-delay="100">
+                <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">Application Status</h4>
+                    <span class="badge bg-light text-primary">{{ user.get_stage_status }}</span>
+                </div>
+                <div class="card-body p-4">
+                    <div class="progress-container mb-4">
+                        <h6 class="mb-3">Application Progress</h6>
+                        <div class="progress" style="height: 25px;">
+                            {% if user.is_rejected %}
+                                <div class="progress-bar bg-danger" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                                    <i class="bi bi-x-circle me-2"></i> Application Rejected
+                                </div>
+                            {% else %}
+                                {% if user.application_stage == 0 %}
+                                    <div class="progress-bar bg-primary" role="progressbar" style="width: 25%;" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
+                                        <i class="bi bi-check-circle me-2"></i> Registration Complete (25%)
+                                    </div>
+                                {% elif user.application_stage == 1 %}
+                                    <div class="progress-bar bg-primary" role="progressbar" style="width: 50%;" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">
+                                        <i class="bi bi-check-circle me-2"></i> Stage 1 Complete (50%)
+                                    </div>
+                                {% elif user.application_stage == 2 %}
+                                    <div class="progress-bar bg-primary" role="progressbar" style="width: 75%;" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100">
+                                        <i class="bi bi-check-circle me-2"></i> Stage 2 Complete (75%)
+                                    </div>
+                                {% elif user.application_stage == 3 %}
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: 100%;" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                                        <i class="bi bi-check-circle me-2"></i> Application Complete (100%)
+                                    </div>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    {% if not user.is_rejected and user.application_stage < 3 %}
+                        <div class="d-grid mt-4">
+                            <a href="{% url 'dashboard' %}" class="btn btn-primary">
+                                <i class="bi bi-arrow-right-circle me-2"></i> Continue Application
+                            </a>
+                        </div>
                     {% endif %}
                 </div>
-                
-                {% if not user.is_rejected and user.application_stage < 3 %}
-                    <p>
-                        <a href="{% url 'dashboard' %}" class="btn btn-primary">
-                            Continue Application
+            </div>
+        </div>
+        
+        <div class="col-lg-8" data-aos="fade-up" data-aos-delay="200">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white py-3">
+                    <h4 class="mb-0">Edit Your Profile</h4>
+                </div>
+                <div class="card-body p-4">
+                    <div class="alert alert-info d-flex" role="alert">
+                        <i class="bi bi-info-circle-fill fs-4 me-3"></i>
+                        <div>
+                            <h5 class="alert-heading">Keep Your Information Updated</h5>
+                            <p class="mb-0">Please ensure your contact information is always up to date. We may need to reach you regarding your application.</p>
+                        </div>
+                    </div>
+                    
+                    <form method="post" class="mt-4">
+                        {% csrf_token %}
+                        {{ form|crispy }}
+                        <div class="d-grid gap-2 mt-4">
+                            <button class="btn btn-primary" type="submit">
+                                <i class="bi bi-check-circle me-2"></i> Update Profile
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card shadow-lg mt-4" data-aos="fade-up" data-aos-delay="300">
+                <div class="card-header bg-primary text-white py-3">
+                    <h4 class="mb-0">Account Security</h4>
+                </div>
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="bg-light rounded-circle p-3 me-3">
+                            <i class="bi bi-shield-lock fs-1 text-primary"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-1">Change Password</h5>
+                            <p class="text-muted mb-0">Secure your account with a strong password</p>
+                        </div>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'account_change_password' %}" class="btn btn-outline-primary">
+                            <i class="bi bi-key me-2"></i> Change Password
                         </a>
-                    </p>
-                {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .avatar-circle {
+        width: 120px;
+        height: 120px;
+        background-color: #f8f9fa;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
 {% endblock %}
