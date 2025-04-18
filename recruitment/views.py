@@ -34,7 +34,7 @@ def questionnaire(request, stage=1):
     FormClass = form_classes.get(stage)
     
     if request.method == 'POST':
-        form = FormClass(user=user, data=request.POST)
+        form = FormClass(user=user, data=request.POST, files=request.FILES)
         
         if form.is_valid():
             # Save answers
@@ -43,12 +43,40 @@ def questionnaire(request, stage=1):
                     question_id = int(field_name.split('_')[1])
                     question = Question.objects.get(id=question_id)
                     
-                    # Create or update answer
-                    answer, created = Answer.objects.update_or_create(
-                        user=user,
-                        question=question,
-                        defaults={'answer_text': str(value)}
-                    )
+                    # Handle different question types
+                    if question.question_type == 'file':
+                        # Handle file uploads
+                        file_upload = request.FILES.get(field_name)
+                        if file_upload:
+                            # Create or update answer with file
+                            answer, created = Answer.objects.update_or_create(
+                                user=user,
+                                question=question,
+                                defaults={
+                                    'answer_text': file_upload.name,  # Store filename in text field
+                                    'file_upload': file_upload  # Store actual file
+                                }
+                            )
+                    elif question.question_type == 'dob':
+                        # Format date as ISO for storage
+                        if value:
+                            try:
+                                # Format for database storage (ISO format)
+                                formatted_value = value.isoformat() if hasattr(value, 'isoformat') else str(value)
+                                answer, created = Answer.objects.update_or_create(
+                                    user=user,
+                                    question=question,
+                                    defaults={'answer_text': formatted_value}
+                                )
+                            except Exception as e:
+                                messages.error(request, f"Error saving date of birth: {e}")
+                    else:
+                        # Handle all other question types
+                        answer, created = Answer.objects.update_or_create(
+                            user=user,
+                            question=question,
+                            defaults={'answer_text': str(value) if value is not None else ''}
+                        )
             
             # Update user's application stage
             user.application_stage = stage

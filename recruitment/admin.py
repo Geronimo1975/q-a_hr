@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.http import HttpResponse
 from django.contrib import messages
 from django.conf import settings
+from django.utils.html import mark_safe
 import csv
 from django.utils import timezone
 from .models import QuestionStage, Question, Answer, ApplicationSource, ApplicantTracking
@@ -11,28 +12,208 @@ from utils.google_sheets import update_sheet_with_answers, create_sheet_if_neede
 class QuestionInline(admin.TabularInline):
     model = Question
     extra = 1
+    fields = ('question_text', 'question_type', 'is_required', 'order', 'choices')
+    readonly_fields = ('get_question_count',)
+    
+    def get_question_count(self, obj):
+        return Question.objects.filter(stage=obj.stage).count()
+    get_question_count.short_description = "Current Question Count"
+    
+    def get_extra(self, request, obj=None, **kwargs):
+        if obj and Question.objects.filter(stage=obj).count() >= 10:
+            return 0  # No extra empty forms if we already have 10 questions
+        return self.extra
 
 
 @admin.register(QuestionStage)
 class QuestionStageAdmin(admin.ModelAdmin):
-    list_display = ('stage_number', 'stage_name')
+    list_display = ('stage_number', 'stage_name', 'question_count', 'stage_status')
     search_fields = ('stage_name',)
     inlines = [QuestionInline]
+    readonly_fields = ('question_count',)
+    
+    def question_count(self, obj):
+        count = Question.objects.filter(stage=obj).count()
+        status = "Complete" if count == 10 else "Incomplete"
+        return f"{count}/10 ({status})"
+    question_count.short_description = "Questions"
+    
+    def stage_status(self, obj):
+        count = Question.objects.filter(stage=obj).count()
+        if count < 10:
+            return mark_safe('<span style="color: red;">Incomplete (Need 10 questions)</span>')
+        elif count > 10:
+            return mark_safe('<span style="color: orange;">Too many questions (Limit: 10)</span>')
+        return mark_safe('<span style="color: green;">Complete</span>')
+    stage_status.short_description = "Status"
+    
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if obj:
+            count = Question.objects.filter(stage=obj).count()
+            help_text = f"This stage currently has {count}/10 questions."
+            form.base_fields['stage_name'].help_text = help_text
+        return form
+    
+    def save_formset(self, request, form, formset, change):
+        """Custom save_formset to enforce the 10 question requirement."""
+        instances = formset.save(commit=False)
+        
+        # Get the stage object
+        stage = form.instance
+        
+        # Count existing questions in this stage (excluding those that will be deleted)
+        existing_count = Question.objects.filter(stage=stage).count() - len(formset.deleted_objects)
+        
+        # Count new questions to be added
+        new_count = len([inst for inst in instances if not inst.pk])
+        
+        # Calculate final count
+        final_count = existing_count + new_count
+        
+        if final_count > 10:
+            from django.contrib import messages
+            messages.error(request, f"Cannot save. This would result in {final_count} questions, but each stage must have exactly 10 questions.")
+            return
+        
+        # Proceed with the save
+        for instance in formset.deleted_objects:
+            instance.delete()
+        for instance in instances:
+            instance.save()
+        formset.save_m2m()
+        
+        # Provide feedback
+        remaining = 10 - final_count
+        if remaining > 0:
+            from django.contrib import messages
+            messages.warning(request, f"Stage saved. Please add {remaining} more question(s) to reach the required 10 questions.")
+
+
+class FileUploadTypeFilter(admin.SimpleListFilter):
+    title = 'File Upload Types'
+    parameter_name = 'file_type'
+    
+    def lookups(self, request, model_admin):
+        return (
+            ('images', 'Images (jpg, png, etc.)'),
+            ('documents', 'Documents (pdf, doc, etc.)'),
+            ('any', 'Any File Type'),
+            ('none', 'No File Uploads'),
+        )
+    
+    def queryset(self, request, queryset):
+        if self.value() == 'images':
+            return queryset.filter(question_type='file', allowed_file_types__icontains='jpg') | \
+                   queryset.filter(question_type='file', allowed_file_types__icontains='png') | \
+                   queryset.filter(question_type='file', allowed_file_types__icontains='jpeg')
+        if self.value() == 'documents':
+            return queryset.filter(question_type='file', allowed_file_types__icontains='pdf') | \
+                   queryset.filter(question_type='file', allowed_file_types__icontains='doc')
+        if self.value() == 'any':
+            return queryset.filter(question_type='file')
+        if self.value() == 'none':
+            return queryset.exclude(question_type='file')
 
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
-    list_display = ('question_text', 'stage', 'question_type', 'is_required', 'order')
-    list_filter = ('stage', 'question_type', 'is_required')
+    list_display = ('question_text', 'stage', 'question_type', 'get_type_details', 'is_required', 'order')
+    list_filter = ('stage', 'question_type', 'is_required', FileUploadTypeFilter)
     search_fields = ('question_text',)
+    fieldsets = (
+        (None, {
+            'fields': ('stage', 'question_text', 'question_type', 'is_required', 'order')
+        }),
+        ('Choice Options', {
+            'fields': ('choices',),
+            'classes': ('collapse',),
+            'description': 'For multiple choice questions, provide options separated by semicolons (e.g., "Option 1;Option 2;Option 3")'
+        }),
+        ('File Upload Settings', {
+            'fields': ('allowed_file_types', 'max_file_size'),
+            'classes': ('collapse',),
+            'description': 'Configure file upload settings (only applicable if question type is "File Upload")'
+        }),
+    )
+    
+    def get_type_details(self, obj):
+        if obj.question_type == 'file':
+            return f"File Upload ({obj.allowed_file_types if obj.allowed_file_types else 'Any'})"
+        elif obj.question_type == 'choice':
+            options = obj.choices.split(';') if obj.choices else []
+            return f"Choice ({len(options)} options)"
+        return obj.get_question_type_display()
+    get_type_details.short_description = "Type Details"
+    
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if obj:
+            if obj.question_type == 'file':
+                form.base_fields['allowed_file_types'].widget.attrs['placeholder'] = "e.g., pdf,jpg,png"
+                form.base_fields['allowed_file_types'].help_text = "Comma-separated list of allowed file extensions"
+            elif obj.question_type == 'choice':
+                form.base_fields['choices'].widget.attrs['placeholder'] = "Option 1;Option 2;Option 3"
+                form.base_fields['choices'].help_text = "Semicolon-separated list of choice options"
+        return form
 
 
 @admin.register(Answer)
 class AnswerAdmin(admin.ModelAdmin):
-    list_display = ('user', 'question', 'answer_text', 'submitted_at')
-    list_filter = ('question__stage', 'submitted_at')
+    list_display = ('user', 'question', 'get_answer_display_admin', 'file_link', 'submitted_at')
+    list_filter = ('question__stage', 'question__question_type', 'submitted_at')
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'answer_text')
     actions = ['export_as_csv', 'export_to_google_sheets']
+    readonly_fields = ('file_preview',)
+    
+    def get_answer_display_admin(self, obj):
+        if obj.question.question_type == 'file' and obj.file_upload:
+            return f"File: {obj.file_upload.name.split('/')[-1]}"
+        elif obj.question.question_type == 'dob' and obj.answer_text:
+            try:
+                from datetime import datetime
+                date_obj = datetime.strptime(obj.answer_text, '%Y-%m-%d')
+                return date_obj.strftime('%d.%m.%Y')
+            except:
+                return obj.answer_text
+        return obj.answer_text[:100] + ('...' if len(obj.answer_text) > 100 else '')
+    get_answer_display_admin.short_description = "Answer"
+    
+    def file_link(self, obj):
+        if obj.file_upload:
+            return mark_safe(f'<a href="{obj.file_upload.url}" target="_blank">View File</a>')
+        return "-"
+    file_link.short_description = "File"
+    
+    def file_preview(self, obj):
+        if not obj.file_upload:
+            return "No file uploaded"
+            
+        file_name = obj.file_upload.name.lower()
+        if file_name.endswith(('.jpg', '.jpeg', '.png', '.gif')):
+            return mark_safe(f'<img src="{obj.file_upload.url}" style="max-width:300px; max-height:300px" />')
+        elif file_name.endswith('.pdf'):
+            return mark_safe(f'<a href="{obj.file_upload.url}" target="_blank" class="button">View PDF</a>')
+        else:
+            return mark_safe(f'<a href="{obj.file_upload.url}" target="_blank" class="button">Download File</a>')
+    file_preview.short_description = "File Preview"
+    
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = [
+            (None, {
+                'fields': ('user', 'question', 'answer_text', 'submitted_at')
+            })
+        ]
+        
+        # Add file preview if this answer has a file
+        if obj and obj.file_upload:
+            fieldsets.append(
+                ('File Upload', {
+                    'fields': ('file_upload', 'file_preview'),
+                })
+            )
+        
+        return fieldsets
     
     def export_as_csv(self, request, queryset):
         meta = self.model._meta

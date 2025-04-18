@@ -126,6 +126,7 @@ def update_sheet_with_answers(user, stage, sheet_id):
     
     try:
         from recruitment.models import Answer, Question
+        from django.conf import settings
         
         # Get user answers for this stage
         answers = Answer.objects.filter(
@@ -141,9 +142,35 @@ def update_sheet_with_answers(user, stage, sheet_id):
             datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ]
         
-        # Add each answer to the row
+        # Add each answer to the row with appropriate formatting
         for answer in answers:
-            row_data.append(f"{answer.question.question_text}: {answer.answer_text}")
+            question_type = answer.question.question_type
+            
+            if question_type == 'file' and answer.file_upload:
+                # For file uploads, include a link to the file
+                if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
+                    file_url = f"{settings.BASE_URL}{answer.file_upload.url}"
+                else:
+                    # If BASE_URL is not set, use a relative path with a note
+                    file_url = f"[FILE UPLOADED: {answer.file_upload.name}]"
+                
+                row_data.append(f"{answer.question.question_text}: {file_url}")
+            elif question_type == 'dob' and answer.answer_text:
+                # Format date of birth in German format (DD.MM.YYYY)
+                try:
+                    from datetime import datetime
+                    date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
+                    formatted_date = date_obj.strftime('%d.%m.%Y')
+                    row_data.append(f"{answer.question.question_text}: {formatted_date}")
+                except:
+                    row_data.append(f"{answer.question.question_text}: {answer.answer_text}")
+            elif question_type == 'phone' and answer.answer_text:
+                # Format phone number for better readability
+                formatted_phone = answer.answer_text.replace('+49', '+49 ')
+                row_data.append(f"{answer.question.question_text}: {formatted_phone}")
+            else:
+                # Standard formatting for other question types
+                row_data.append(f"{answer.question.question_text}: {answer.answer_text}")
         
         # Append the row to Google Sheet
         sheet_name = f"Stage{stage}"
