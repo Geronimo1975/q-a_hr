@@ -1,0 +1,419 @@
+# Google Sheets Integration for DeliveryDriverPortal
+
+This guide provides step-by-step instructions to integrate Google Sheets with your existing Django DeliveryDriverPortal project on Replit, allowing you to store applicant responses directly in Google Docs/Sheets.
+
+## Implementation Steps
+
+### 1. Install Required Packages
+
+Add the following packages to your Replit project:
+
+```bash
+pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+```
+
+Add these requirements to your `pyproject.toml` file:
+
+```toml
+[tool.poetry.dependencies]
+google-auth = "^2.22.0"
+google-auth-oauthlib = "^1.0.0"
+google-auth-httplib2 = "^0.1.0"
+google-api-python-client = "^2.97.0"
+```
+
+### 2. Set Up Google Cloud Platform
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project
+3. Enable the Google Sheets API for your project
+4. Create OAuth credentials (select "Desktop app" type)
+5. Download the JSON credentials file and rename it to `credentials.json`
+6. Upload this file to the root directory of your Replit project
+
+### 3. Create a Google Sheets Utility Module
+
+Create a new directory called `utils` in your project root and add a file called `google_sheets.py` with the following content:
+
+```python
+import os
+import json
+from datetime import datetime
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from django.conf import settings
+
+def get_credentials():
+    """Obtain and refresh credentials for Google Sheets access."""
+    creds = None
+    token_file = os.path.join(settings.BASE_DIR, 'token.json')
+    credentials_file = os.path.join(settings.BASE_DIR, 'credentials.json')
+    
+    # Token file stores the user's access and refresh tokens
+    if os.path.exists(token_file):
+        creds = Credentials.from_authorized_user_info(
+            json.loads(open(token_file).read()),
+            ['https://www.googleapis.com/auth/spreadsheets']
+        )
+    
+    # If there are no valid credentials, the user needs to log in
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                credentials_file,
+                ['https://www.googleapis.com/auth/spreadsheets']
+            )
+            # This will require you to authorize once manually
+            creds = flow.run_local_server(port=0)
+        
+        # Save the credentials for the next run
+        with open(token_file, 'w') as token:
+            token.write(creds.to_json())
+    
+    return creds
+
+def get_service():
+    """Get the Google Sheets service."""
+    creds = get_credentials()
+    service = build('sheets', 'v4', credentials=creds)
+    return service.spreadsheets()
+
+def append_row(values, sheet_id, range_name='Sheet1!A:Z'):
+    """
+    Append a new row to the Google Sheet.
+    
+    Args:
+        values: List of values for the new row
+        sheet_id: Google Sheet ID
+        range_name: Range where to append values
+    
+    Returns:
+        Dict: API response
+    """
+    try:
+        sheets = get_service()
+        body = {
+            'values': [values]
+        }
+        result = sheets.values().append(
+            spreadsheetId=sheet_id,
+            range=range_name,
+            valueInputOption='USER_ENTERED',
+            insertDataOption='INSERT_ROWS',
+            body=body
+        ).execute()
+        return result
+    except HttpError as error:
+        print(f"An error occurred: {error}")
+        return None
+
+def update_sheet_with_answers(user, stage, sheet_id):
+    """
+    Update Google Sheet with user's answers for a specific stage.
+    
+    Args:
+        user: Django User object
+        stage: Stage number
+        sheet_id: Google Sheet ID
+    """
+    from recruitment.models import Answer, Question
+    
+    # Get user answers for this stage
+    answers = Answer.objects.filter(
+        user=user,
+        question__stage__stage_number=stage
+    ).order_by('question__order')
+    
+    # Prepare data for Google Sheets
+    row_data = [
+        user.email,
+        f"{user.first_name} {user.last_name}",
+        f"Stage {stage}",
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ]
+    
+    # Add each answer to the row
+    for answer in answers:
+        row_data.append(f"{answer.question.question_text}: {answer.answer_text}")
+    
+    # Append the row to Google Sheet
+    sheet_name = f"Stage{stage}"
+    result = append_row(row_data, sheet_id, f"{sheet_name}!A:Z")
+    
+    return result is not None
+
+def create_sheet_if_needed(sheet_id):
+    """
+    Set up the Google Sheet with appropriate tabs for each stage.
+    """
+    try:
+        sheets = get_service()
+        
+        # Get spreadsheet info
+        spreadsheet = sheets.get(spreadsheetId=sheet_id).execute()
+        
+        # Check if required sheets already exist
+        existing_sheets = [sheet['properties']['title'] for sheet in spreadsheet['sheets']]
+        needed_sheets = ['Stage1', 'Stage2', 'Stage3']
+        
+        batch_update_requests = []
+        
+        # Add missing sheets
+        for sheet_name in needed_sheets:
+            if sheet_name not in existing_sheets:
+                batch_update_requests.append({
+                    'addSheet': {
+                        'properties': {
+                            'title': sheet_name
+                        }
+                    }
+                })
+        
+        # Add headers for each sheet
+        headers = {
+            'Stage1': ['Email', 'Full Name', 'Stage', 'Timestamp', 'Responses...'],
+            'Stage2': ['Email', 'Full Name', 'Stage', 'Timestamp', 'Responses...'],
+            'Stage3': ['Email', 'Full Name', 'Stage', 'Timestamp', 'Responses...']
+        }
+        
+        # Execute batch updates if any
+        if batch_update_requests:
+            sheets.batchUpdate(
+                spreadsheetId=sheet_id,
+                body={'requests': batch_update_requests}
+            ).execute()
+            print('Sheets created successfully')
+        
+        # Add headers to each sheet
+        for sheet_name, header in headers.items():
+            sheets.values().update(
+                spreadsheetId=sheet_id,
+                range=f"{sheet_name}!A1:E1",
+                valueInputOption='USER_ENTERED',
+                body={'values': [header]}
+            ).execute()
+        
+        print('Google Sheet has been set up successfully')
+        return True
+    
+    except HttpError as error:
+        print(f'An error occurred: {error}')
+        return False
+    except Exception as e:
+        print(f'An unexpected error occurred: {e}')
+        return False
+```
+
+### 4. Update Settings
+
+Add Google Sheets configuration to your `settings.py`:
+
+```python
+# Google Sheets Integration
+GOOGLE_SHEETS = {
+    'enabled': True,
+    'spreadsheet_id': 'YOUR_SPREADSHEET_ID_HERE',  # Replace with your actual Google Sheet ID
+}
+```
+
+Replace `YOUR_SPREADSHEET_ID_HERE` with the ID of your Google Sheet. You can find this ID in the URL of your Google Sheet:
+`https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit`
+
+### 5. Create a Management Command to Set Up Google Sheets
+
+Create a file `recruitment/management/commands/setup_google_sheet.py`:
+
+```python
+from django.core.management.base import BaseCommand
+from django.conf import settings
+from utils.google_sheets import create_sheet_if_needed
+
+class Command(BaseCommand):
+    help = 'Set up Google Sheet for storing questionnaire responses'
+
+    def handle(self, *args, **options):
+        if not settings.GOOGLE_SHEETS.get('enabled', False):
+            self.stdout.write(self.style.WARNING('Google Sheets integration is disabled in settings'))
+            return
+        
+        sheet_id = settings.GOOGLE_SHEETS.get('spreadsheet_id')
+        if not sheet_id:
+            self.stdout.write(self.style.ERROR('No spreadsheet ID specified in settings'))
+            return
+        
+        success = create_sheet_if_needed(sheet_id)
+        if success:
+            self.stdout.write(self.style.SUCCESS('Google Sheet has been set up successfully'))
+        else:
+            self.stdout.write(self.style.ERROR('Failed to set up Google Sheet'))
+```
+
+### 6. Modify Views to Save Data to Google Sheets
+
+Update your questionnaire view to send data to Google Sheets. Here's how to modify the view in `recruitment/views.py`:
+
+```python
+from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.core.mail import send_mail
+from django.conf import settings
+from .forms import Stage1QuestionnaireForm, Stage2QuestionnaireForm, Stage3QuestionnaireForm
+from .models import Answer, Question, QuestionStage
+from utils.google_sheets import update_sheet_with_answers
+
+@login_required
+def questionnaire(request, stage=1):
+    user = request.user
+    
+    # Check if user is allowed to access this stage
+    if user.application_stage < stage - 1 or user.is_rejected:
+        messages.error(request, "You cannot access this stage yet or your application has been rejected.")
+        return redirect('dashboard')
+    
+    # Determine which form to use
+    form_classes = {
+        1: Stage1QuestionnaireForm,
+        2: Stage2QuestionnaireForm,
+        3: Stage3QuestionnaireForm,
+    }
+    
+    FormClass = form_classes.get(stage)
+    
+    if request.method == 'POST':
+        form = FormClass(user=user, data=request.POST)
+        
+        if form.is_valid():
+            # Save answers
+            for field_name, value in form.cleaned_data.items():
+                if field_name.startswith('question_'):
+                    question_id = int(field_name.split('_')[1])
+                    question = Question.objects.get(id=question_id)
+                    
+                    # Create or update answer
+                    answer, created = Answer.objects.update_or_create(
+                        user=user,
+                        question=question,
+                        defaults={'answer_text': str(value)}
+                    )
+            
+            # Update user's application stage if this is the first time completing this stage
+            if user.application_stage < stage:
+                user.application_stage = stage
+                user.save()
+                
+                # Save answers to Google Sheets if enabled
+                if settings.GOOGLE_SHEETS.get('enabled', False):
+                    sheet_id = settings.GOOGLE_SHEETS.get('spreadsheet_id')
+                    sheets_updated = update_sheet_with_answers(user, stage, sheet_id)
+                    if not sheets_updated:
+                        messages.warning(request, "Responses were saved locally but could not be exported to Google Sheets.")
+                
+                # Send email notification
+                if stage < 3:
+                    # Simulate acceptance to next stage (in a real system, you'd have logic here)
+                    acceptance = True
+                    
+                    if acceptance:
+                        send_mail(
+                            f'Your application has been accepted to Stage {stage+1}',
+                            f'Congratulations! You have successfully completed Stage {stage} and are invited to continue to Stage {stage+1}.',
+                            settings.DEFAULT_FROM_EMAIL,
+                            [user.email],
+                            fail_silently=False,
+                        )
+                    else:
+                        user.is_rejected = True
+                        user.save()
+                        send_mail(
+                            'Application Status Update',
+                            f'Thank you for your interest. We regret to inform you that your application will not proceed to the next stage.',
+                            settings.DEFAULT_FROM_EMAIL,
+                            [user.email],
+                            fail_silently=False,
+                        )
+                else:
+                    # Final stage completion
+                    send_mail(
+                        'Application Successfully Completed',
+                        'Thank you for completing all stages of the application. Our team will review your information and contact you soon.',
+                        settings.DEFAULT_FROM_EMAIL,
+                        [user.email],
+                        fail_silently=False,
+                    )
+            
+            messages.success(request, f"Stage {stage} questionnaire completed successfully!")
+            return redirect('dashboard')
+    else:
+        form = FormClass(user=user)
+    
+    return render(request, 'recruitment/questionnaire.html', {
+        'form': form,
+        'stage': stage,
+        'stage_name': QuestionStage.objects.get(stage_number=stage).stage_name
+    })
+```
+
+### 7. Run the Setup Command
+
+Execute the setup command to initialize your Google Sheet:
+
+```bash
+python manage.py setup_google_sheet
+```
+
+This will:
+1. Create necessary tabs in your Google Sheet (Stage1, Stage2, Stage3)
+2. Add appropriate headers to each tab
+3. Prepare the sheet for receiving data
+
+### 8. Authorization Process
+
+When running the setup command or when your application first attempts to access Google Sheets, you'll need to authorize the application:
+
+1. A browser window will open automatically
+2. Sign in with your Google account and grant permission to the application
+3. The authorization will be saved to `token.json` for future use
+
+### 9. Testing the Integration
+
+To test if the integration is working:
+1. Complete the questionnaire as a test user
+2. Check your Google Sheet to verify that the responses were saved
+3. Each stage's responses should appear in the corresponding tab (Stage1, Stage2, Stage3)
+
+## Troubleshooting
+
+If you encounter issues:
+
+1. **Authentication Errors**:
+   - Ensure `credentials.json` is in the correct location
+   - Delete `token.json` and try again to re-authenticate
+
+2. **Permission Errors**:
+   - Make sure the Google account has edit access to the spreadsheet
+   - Check that the Google Sheets API is enabled for your project
+
+3. **Replit-Specific Issues**:
+   - For authentication in Replit environment, you might need to use a headless authentication method
+   - Consider implementing a service account instead of OAuth for automated deployments
+
+4. **Missing Data**:
+   - Confirm that the spreadsheet ID in settings is correct
+   - Verify that data is being saved to the local database first
+   - Check for error messages in the console logs
+
+## Next Steps and Enhancements
+
+Once the basic integration is working, consider these enhancements:
+
+1. **Automated Analysis**: Use Google Sheets formulas to automatically analyze and score responses
+2. **Data Visualization**: Create charts and graphs within Google Sheets
+3. **Notifications**: Set up Google Sheets triggers to notify when new data is added
+4. **Background Processing**: Move Google Sheets updates to a background task using Celery or similar
+5. **Admin Interface**: Add a link in the Django admin to view the Google Sheet directly

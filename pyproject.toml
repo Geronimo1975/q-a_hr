@@ -10,4 +10,8 @@ dependencies = [
     "django-crispy-forms>=2.4",
     "django==4.2",
     "psycopg2-binary>=2.9.10",
+    "google-auth>=2.39.0",
+    "google-auth-oauthlib>=1.2.1",
+    "google-auth-httplib2>=0.2.0",
+    "google-api-python-client>=2.167.0",
 ]
