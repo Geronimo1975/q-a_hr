@@ -1,0 +1,542 @@
+# Django Delivery Driver Recruitment Platform - Replit Development Guide
+
+## Project Overview
+
+Create a multi-stage recruitment platform for delivery drivers with the following functionality:
+- Initial advertisement via Kleinanzeigen with a link to the application
+- User registration and login system (with GDPR compliance)
+- Multi-stage questionnaire process (3 stages with 10 questions each)
+- Automated email responses for acceptance/rejection between stages
+- Admin dashboard to review applications
+- PostgreSQL database for data storage
+
+**IMPORTANT: This project must be built with Django, NOT Flask. Do NOT use React for the frontend.**
+
+## Technical Requirements
+
+### Backend
+- Python 3.9+
+- Django 4.2+
+- PostgreSQL for database
+- Django Rest Framework (for API endpoints if needed)
+- django-crispy-forms (for form styling)
+- django-allauth (for authentication)
+
+### Frontend
+- HTML/CSS/JavaScript (no React)
+- Bootstrap 5 for responsive design
+- Minimal JavaScript where needed
+
+## Database Schema
+
+Create the following models:
+
+```python
+# accounts/models.py
+from django.db import models
+from django.contrib.auth.models import AbstractUser
+
+class CustomUser(AbstractUser):
+    phone_number = models.CharField(max_length=20, blank=True)
+    gdpr_consent = models.BooleanField(default=False)
+    application_stage = models.IntegerField(default=0)
+    is_rejected = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return self.email
+
+# recruitment/models.py
+from django.db import models
+from accounts.models import CustomUser
+
+class QuestionStage(models.Model):
+    stage_number = models.IntegerField(unique=True)
+    stage_name = models.CharField(max_length=100)
+    
+    def __str__(self):
+        return f"Stage {self.stage_number}: {self.stage_name}"
+
+class Question(models.Model):
+    QUESTION_TYPES = (
+        ('text', 'Text Input'),
+        ('number', 'Number Input'),
+        ('choice', 'Multiple Choice'),
+        ('boolean', 'Yes/No'),
+    )
+    
+    stage = models.ForeignKey(QuestionStage, on_delete=models.CASCADE, related_name='questions')
+    question_text = models.TextField()
+    question_type = models.CharField(max_length=10, choices=QUESTION_TYPES)
+    is_required = models.BooleanField(default=True)
+    choices = models.TextField(blank=True, help_text="For multiple choice, provide options separated by semicolons")
+    order = models.IntegerField(default=0)
+    
+    def __str__(self):
+        return f"{self.stage.stage_number}.{self.order}: {self.question_text[:50]}"
+
+class Answer(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='answers')
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='answers')
+    answer_text = models.TextField()
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['user', 'question']
+    
+    def __str__(self):
+        return f"Answer by {self.user.email} to {self.question.question_text[:30]}"
+```
+
+## Key Features to Implement
+
+### 1. User Registration and GDPR Consent
+- Create registration form with required fields
+- Include GDPR consent checkbox with detailed text
+- Email verification process
+- Login system with password reset functionality
+
+### 2. Multi-stage Questionnaire System
+- Three separate questionnaire stages with 10 questions each
+- Questions from the image should be divided among these stages
+- Progress tracking for each user
+- Form validation for required fields
+- Ability to save progress and continue later
+
+### 3. Automated Email System
+- Send confirmation emails upon registration
+- Send acceptance/rejection emails between stages
+- Use Django's built-in email functionality
+- Create email templates for each scenario
+
+### 4. Admin Dashboard
+- Custom Django admin interface
+- Ability to view and filter applicants by stage
+- Export application data to CSV
+- Search functionality by applicant details
+
+### 5. Kleinanzeigen Advertisement Integration
+- Generate unique application links
+- Track which advertisement source the applicant came from
+
+## Implementation Steps
+
+### Step 1: Project Setup
+```bash
+# Create a new Django project in Replit
+django-admin startproject driver_recruitment .
+
+# Create apps
+python manage.py startapp accounts
+python manage.py startapp recruitment
+python manage.py startapp core
+
+# Configure PostgreSQL in settings.py
+# Make sure to use environment variables for sensitive information
+```
+
+### Step 2: Database Configuration
+Configure PostgreSQL in Replit by adding to your `.replit` file:
+
+```
+[env]
+POSTGRES_DATABASE_URL = "$REPLIT_DB_URL"
+SECRET_KEY = "$DJANGO_SECRET_KEY"
+```
+
+And in your `settings.py`:
+
+```python
+import os
+import dj_database_url
+from pathlib import Path
+
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-key')
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = 'REPLIT_DB_URL' not in os.environ
+
+ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = [f'https://{os.environ.get("REPL_SLUG")}.{os.environ.get("REPL_OWNER")}.repl.co']
+
+# Database
+# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+
+DATABASES = {
+    'default': dj_database_url.config(
+        default='sqlite:///' + os.path.join(BASE_DIR, 'db.sqlite3'),
+        conn_max_age=600
+    )
+}
+```
+
+### Step 3: User Authentication System
+Implement the user authentication system with Django's built-in auth or django-allauth for more features.
+
+### Step 4: Form Creation
+Create forms for each stage of questions using Django's form system:
+
+```python
+# recruitment/forms.py
+from django import forms
+from .models import Question, Answer
+
+class BaseQuestionnaireForm(forms.Form):
+    def __init__(self, stage, *args, **kwargs):
+        self.user = kwargs.pop('user', None)
+        super().__init__(*args, **kwargs)
+        
+        questions = Question.objects.filter(stage__stage_number=stage).order_by('order')
+        
+        for question in questions:
+            field_name = f'question_{question.id}'
+            
+            if question.question_type == 'text':
+                self.fields[field_name] = forms.CharField(
+                    label=question.question_text,
+                    required=question.is_required,
+                    widget=forms.TextInput(attrs={'class': 'form-control'})
+                )
+            
+            elif question.question_type == 'number':
+                self.fields[field_name] = forms.IntegerField(
+                    label=question.question_text,
+                    required=question.is_required,
+                    widget=forms.NumberInput(attrs={'class': 'form-control'})
+                )
+            
+            elif question.question_type == 'choice':
+                choices = [(c.strip(), c.strip()) for c in question.choices.split(';')]
+                self.fields[field_name] = forms.ChoiceField(
+                    label=question.question_text,
+                    required=question.is_required,
+                    choices=choices,
+                    widget=forms.Select(attrs={'class': 'form-select'})
+                )
+            
+            elif question.question_type == 'boolean':
+                self.fields[field_name] = forms.BooleanField(
+                    label=question.question_text,
+                    required=False,
+                    widget=forms.CheckboxInput(attrs={'class': 'form-check-input'})
+                )
+            
+            # Pre-fill with existing answer if available
+            if self.user:
+                try:
+                    answer = Answer.objects.get(user=self.user, question=question)
+                    self.fields[field_name].initial = answer.answer_text
+                except Answer.DoesNotExist:
+                    pass
+
+class Stage1QuestionnaireForm(BaseQuestionnaireForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(stage=1, *args, **kwargs)
+
+class Stage2QuestionnaireForm(BaseQuestionnaireForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(stage=2, *args, **kwargs)
+
+class Stage3QuestionnaireForm(BaseQuestionnaireForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(stage=3, *args, **kwargs)
+```
+
+### Step 5: Views and Templates
+Create the necessary views and templates for each page:
+
+```python
+# recruitment/views.py
+from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.core.mail import send_mail
+from django.conf import settings
+from .forms import Stage1QuestionnaireForm, Stage2QuestionnaireForm, Stage3QuestionnaireForm
+from .models import Answer, Question, QuestionStage
+from accounts.models import CustomUser
+
+@login_required
+def questionnaire(request, stage=1):
+    user = request.user
+    
+    # Check if user is allowed to access this stage
+    if user.application_stage < stage - 1 or user.is_rejected:
+        messages.error(request, "You cannot access this stage yet or your application has been rejected.")
+        return redirect('dashboard')
+    
+    # Determine which form to use
+    form_classes = {
+        1: Stage1QuestionnaireForm,
+        2: Stage2QuestionnaireForm,
+        3: Stage3QuestionnaireForm,
+    }
+    
+    FormClass = form_classes.get(stage)
+    
+    if request.method == 'POST':
+        form = FormClass(user=user, data=request.POST)
+        
+        if form.is_valid():
+            # Save answers
+            for field_name, value in form.cleaned_data.items():
+                if field_name.startswith('question_'):
+                    question_id = int(field_name.split('_')[1])
+                    question = Question.objects.get(id=question_id)
+                    
+                    # Create or update answer
+                    answer, created = Answer.objects.update_or_create(
+                        user=user,
+                        question=question,
+                        defaults={'answer_text': str(value)}
+                    )
+            
+            # Update user's application stage if this is the first time completing this stage
+            if user.application_stage < stage:
+                user.application_stage = stage
+                user.save()
+                
+                # Send email notification
+                if stage < 3:
+                    # Simulate acceptance to next stage (in a real system, you'd have logic here)
+                    acceptance = True
+                    
+                    if acceptance:
+                        send_mail(
+                            f'Your application has been accepted to Stage {stage+1}',
+                            f'Congratulations! You have successfully completed Stage {stage} and are invited to continue to Stage {stage+1}.',
+                            settings.DEFAULT_FROM_EMAIL,
+                            [user.email],
+                            fail_silently=False,
+                        )
+                    else:
+                        user.is_rejected = True
+                        user.save()
+                        send_mail(
+                            'Application Status Update',
+                            f'Thank you for your interest. We regret to inform you that your application will not proceed to the next stage.',
+                            settings.DEFAULT_FROM_EMAIL,
+                            [user.email],
+                            fail_silently=False,
+                        )
+                else:
+                    # Final stage completion
+                    send_mail(
+                        'Application Successfully Completed',
+                        'Thank you for completing all stages of the application. Our team will review your information and contact you soon.',
+                        settings.DEFAULT_FROM_EMAIL,
+                        [user.email],
+                        fail_silently=False,
+                    )
+            
+            messages.success(request, f"Stage {stage} questionnaire completed successfully!")
+            return redirect('dashboard')
+    else:
+        form = FormClass(user=user)
+    
+    return render(request, 'recruitment/questionnaire.html', {
+        'form': form,
+        'stage': stage,
+        'stage_name': QuestionStage.objects.get(stage_number=stage).stage_name
+    })
+
+@login_required
+def dashboard(request):
+    user = request.user
+    return render(request, 'recruitment/dashboard.html', {'user': user})
+```
+
+### Step 6: URL Configuration
+
+```python
+# driver_recruitment/urls.py
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('accounts/', include('accounts.urls')),
+    path('', include('recruitment.urls')),
+]
+
+# recruitment/urls.py
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('', views.dashboard, name='dashboard'),
+    path('questionnaire/<int:stage>/', views.questionnaire, name='questionnaire'),
+]
+
+# accounts/urls.py
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('signup/', views.signup, name='signup'),
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+]
+```
+
+### Step 7: Templates
+
+Create the following templates:
+- Base template with navigation
+- Registration and login pages
+- Dashboard page showing application progress
+- Questionnaire page for each stage
+- Email templates
+
+### Step 8: Admin Configuration
+
+```python
+# recruitment/admin.py
+from django.contrib import admin
+from .models import QuestionStage, Question, Answer
+from accounts.models import CustomUser
+
+class QuestionInline(admin.TabularInline):
+    model = Question
+    extra = 1
+
+@admin.register(QuestionStage)
+class QuestionStageAdmin(admin.ModelAdmin):
+    inlines = [QuestionInline]
+    list_display = ('stage_number', 'stage_name')
+
+@admin.register(Question)
+class QuestionAdmin(admin.ModelAdmin):
+    list_display = ('question_text', 'stage', 'question_type', 'is_required', 'order')
+    list_filter = ('stage', 'question_type', 'is_required')
+    search_fields = ('question_text',)
+
+@admin.register(Answer)
+class AnswerAdmin(admin.ModelAdmin):
+    list_display = ('user', 'question', 'answer_text', 'submitted_at')
+    list_filter = ('question__stage', 'submitted_at')
+    search_fields = ('user__email', 'user__username', 'answer_text')
+    date_hierarchy = 'submitted_at'
+
+# accounts/admin.py
+from django.contrib import admin
+from .models import CustomUser
+
+@admin.register(CustomUser)
+class CustomUserAdmin(admin.ModelAdmin):
+    list_display = ('email', 'username', 'application_stage', 'is_rejected', 'created_at')
+    list_filter = ('application_stage', 'is_rejected')
+    search_fields = ('email', 'username', 'first_name', 'last_name')
+    date_hierarchy = 'created_at'
+```
+
+### Step 9: GDPR Compliance
+Ensure your application is GDPR compliant by:
+- Including detailed privacy policy
+- Adding checkbox for consent during registration
+- Providing option to download or delete personal data
+- Implementing data retention policies
+
+### Step 10: Deploy on Replit
+- Set up environment variables for sensitive information
+- Configure the Replit database
+- Set up a custom domain if needed
+- Configure Replit to keep the application running
+
+## Advertisement Template for Kleinanzeigen
+
+```
+🚚 DELIVERY DRIVERS WANTED IN HAMBURG 🚚
+
+We are looking for reliable delivery drivers to join our growing team! 
+Flexible hours and competitive pay.
+
+Requirements:
+- Valid driver's license
+- Reliable vehicle
+- Smartphone with data plan
+- Good knowledge of Hamburg area
+
+Apply online through our quick and easy application process:
+[YOUR_REPLIT_APP_URL]
+
+Complete the first stage of our application in just 5 minutes to see if you qualify!
+```
+
+## Data Population
+
+Create a management command to populate the database with the questions from the image:
+
+```python
+# recruitment/management/commands/populate_questions.py
+from django.core.management.base import BaseCommand
+from recruitment.models import QuestionStage, Question
+
+class Command(BaseCommand):
+    help = 'Populates the database with predefined questions'
+
+    def handle(self, *args, **options):
+        # Create stages
+        stage1, _ = QuestionStage.objects.get_or_create(
+            stage_number=1,
+            defaults={'stage_name': 'Basic Information'}
+        )
+        
+        stage2, _ = QuestionStage.objects.get_or_create(
+            stage_number=2,
+            defaults={'stage_name': 'Work Experience'}
+        )
+        
+        stage3, _ = QuestionStage.objects.get_or_create(
+            stage_number=3,
+            defaults={'stage_name': 'Detailed Assessment'}
+        )
+        
+        # First stage questions
+        questions_stage1 = [
+            {
+                'question_text': 'Do you own or have access to a delivery platform that can give you extra jobs and income?',
+                'question_type': 'boolean',
+                'order': 1
+            },
+            {
+                'question_text': 'Which company does are current working for?',
+                'question_type': 'text',
+                'order': 2
+            },
+            {
+                'question_text': 'Vehicle Type',
+                'question_type': 'choice',
+                'choices': 'Car;Bike;Scooter;Walking',
+                'order': 3
+            },
+            # Add more questions from the image for stage 1
+        ]
+        
+        # Add stage 2 and 3 questions similar to above
+        
+        # Create questions in database
+        for question_data in questions_stage1:
+            Question.objects.get_or_create(
+                stage=stage1,
+                question_text=question_data['question_text'],
+                defaults={
+                    'question_type': question_data['question_type'],
+                    'order': question_data['order'],
+                    'choices': question_data.get('choices', '')
+                }
+            )
+        
+        # Do the same for stage 2 and 3 questions
+        
+        self.stdout.write(self.style.SUCCESS('Successfully populated questions'))
+```
+
+Run with:
+```bash
+python manage.py populate_questions
+```
