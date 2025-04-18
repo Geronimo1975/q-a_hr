@@ -11,15 +11,15 @@
     <div class="row align-items-center">
       <div class="col-lg-6" data-aos="fade-right">
         <div class="hero-content py-5">
-          <h1 class="display-4 fw-bold mb-3">{{ "Become a Delivery Driver"|direct_translate }}</h1>
-          <p class="lead mb-4">{{ "Join our team of professional drivers and enjoy flexible hours, competitive pay, and a supportive work environment."|direct_translate }}</p>
+          <h1 class="display-4 fw-bold mb-3">{% editable_content "hero_title" "Werde Lieferfahrer" %}</h1>
+          <p class="lead mb-4">{% editable_content "hero_subtitle" "Werde Teil unseres Teams professioneller Fahrer und genieße flexible Arbeitszeiten, wettbewerbsfähige Bezahlung und ein unterstützendes Arbeitsumfeld." %}</p>
           <div class="d-grid gap-2 d-md-flex justify-content-md-start">
             {% if not user.is_authenticated %}
-              <a href="{% url 'account_signup' %}" class="btn btn-light btn-lg px-4 me-md-2 fw-bold">{{ "Apply Now"|direct_translate }}</a>
-              <a href="#benefits" class="btn btn-outline-light btn-lg px-4">{{ "Learn More"|direct_translate }}</a>
+              <a href="{% url 'account_signup' %}" class="btn btn-light btn-lg px-4 me-md-2 fw-bold">{% editable_content "apply_now_button" "Bewerbung Fortsetzen" %}</a>
+              <a href="#benefits" class="btn btn-outline-light btn-lg px-4">{% editable_content "learn_more_button" "Mehr Erfahren" %}</a>
             {% else %}
-              <a href="{% url 'dashboard' %}" class="btn btn-light btn-lg px-4 me-md-2 fw-bold">{% trans "Continue Application" %}</a>
-              <a href="#benefits" class="btn btn-outline-light btn-lg px-4">{% trans "Learn More" %}</a>
+              <a href="{% url 'dashboard' %}" class="btn btn-light btn-lg px-4 me-md-2 fw-bold">{% editable_content "continue_application_button" "Bewerbung Fortsetzen" %}</a>
+              <a href="#benefits" class="btn btn-outline-light btn-lg px-4">{% editable_content "learn_more_button" "Mehr Erfahren" %}</a>
             {% endif %}
           </div>
         </div>
@@ -187,7 +187,7 @@
     </div>
   </div>
   <div class="text-center mt-4" data-aos="fade-up" data-aos-delay="400">
-    <a href="{% url 'account_signup' %}" class="btn btn-primary btn-lg">Start Your Application Now</a>
+    <a href="{% url 'account_signup' %}" class="btn btn-primary btn-lg">{% editable_content "start_application_button" "Bewerbung Jetzt Starten" %}</a>
   </div>
 </div>
 
@@ -304,9 +304,9 @@
 <div class="container my-5">
   <div class="card bg-primary text-white p-5 text-center" data-aos="fade-up">
     <div class="card-body">
-      <h2 class="mb-3">Ready to Join Our Team?</h2>
-      <p class="lead mb-4">Start your journey as a delivery driver today and enjoy the freedom, flexibility, and competitive earnings.</p>
-      <a href="{% url 'account_signup' %}" class="btn btn-light btn-lg px-5">Apply Now</a>
+      <h2 class="mb-3">{% editable_content "cta_title" "Bereit, unserem Team beizutreten?" %}</h2>
+      <p class="lead mb-4">{% editable_content "cta_subtitle" "Starten Sie Ihre Reise als Lieferfahrer noch heute und genießen Sie Freiheit, Flexibilität und wettbewerbsfähige Verdienstmöglichkeiten." %}</p>
+      <a href="{% url 'account_signup' %}" class="btn btn-light btn-lg px-5">{% editable_content "cta_button" "Jetzt Bewerben" %}</a>
     </div>
   </div>
 </div>
