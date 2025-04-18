@@ -146,3 +146,9 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = True
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@driverrecruitment.com')
+
+# Google Sheets Integration
+GOOGLE_SHEETS = {
+    'enabled': os.environ.get('GOOGLE_SHEETS_ENABLED', 'False') == 'True',
+    'spreadsheet_id': os.environ.get('GOOGLE_SHEETS_ID', ''),  # Add your Google Sheet ID here
+}

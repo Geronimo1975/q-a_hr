@@ -7,6 +7,7 @@ from django.http import HttpResponseForbidden
 from .forms import Stage1QuestionnaireForm, Stage2QuestionnaireForm, Stage3QuestionnaireForm
 from .models import Answer, Question, QuestionStage, ApplicationSource, ApplicantTracking
 from accounts.models import CustomUser
+from utils.google_sheets import update_sheet_with_answers
 
 
 @login_required
@@ -52,6 +53,14 @@ def questionnaire(request, stage=1):
             # Update user's application stage
             user.application_stage = stage
             user.save()
+            
+            # Save answers to Google Sheets if enabled
+            if settings.GOOGLE_SHEETS.get('enabled', False):
+                sheet_id = settings.GOOGLE_SHEETS.get('spreadsheet_id')
+                if sheet_id:
+                    sheets_updated = update_sheet_with_answers(user, stage, sheet_id)
+                    if not sheets_updated:
+                        messages.warning(request, "Responses were saved locally but could not be exported to Google Sheets.")
             
             # Send email notification
             if stage < 3:
