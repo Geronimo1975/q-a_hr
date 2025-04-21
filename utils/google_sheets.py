@@ -277,7 +277,7 @@ def create_sheet_if_needed(sheet_id=None):
         
         # Check if required sheets already exist
         existing_sheets = [sheet['properties']['title'] for sheet in spreadsheet['sheets']]
-        needed_sheets = ['Stage1', 'Stage2', 'Stage3']
+        needed_sheets = ['Stage1', 'Stage2', 'Stage3', 'AnswersMatrix']
         
         batch_update_requests = []
         
@@ -292,7 +292,7 @@ def create_sheet_if_needed(sheet_id=None):
                     }
                 })
         
-        # Add headers for each sheet matching the example format
+        # Add headers for each stage sheet matching the example format
         headers = {
             'Stage1': ['Marcaj de timp', 'GDPR Agreement', 'Numele', 'Prenumele', 'CNP (Cod Numeric Personal)', 'Domiciliul sau reședința', 'Număr de telefon', 'Adresa de E-mail', 'Opțiunea primită', 'Țara de reședință', 'Încărcare document'],
             'Stage2': ['Marcaj de timp', 'GDPR Agreement', 'Numele', 'Prenumele', 'CNP (Cod Numeric Personal)', 'Domiciliul sau reședința', 'Număr de telefon', 'Adresa de E-mail', 'Opțiunea primită', 'Țara de reședință', 'Încărcare document'],
@@ -331,6 +331,36 @@ def create_sheet_if_needed(sheet_id=None):
                 print(f"Error adding header to {sheet_name}: {error}")
                 # Continue with other sheets even if one fails
         
+        # Now set up the answers matrix tab with questions as headers
+        try:
+            from recruitment.models import Question
+            
+            if 'AnswersMatrix' in existing_sheets or 'AnswersMatrix' in needed_sheets:
+                # First column is for user information
+                matrix_headers = ['User Email', 'First Name', 'Last Name', 'Phone Number']
+                
+                # Get all questions ordered by stage and order for column headers
+                questions = Question.objects.all().order_by('stage__stage_number', 'order')
+                
+                # Add question text as column headers
+                for question in questions:
+                    q_header = f"Stage {question.stage.stage_number}.{question.order}: {question.question_text[:50]}"
+                    matrix_headers.append(q_header)
+                
+                # Put headers in the configured header row
+                target_row = config.header_row_index if config.has_header_row else 1
+                sheets.values().update(
+                    spreadsheetId=sheet_id,
+                    range=f"AnswersMatrix!A{target_row}:{get_column_letter(len(matrix_headers))}{target_row}",
+                    valueInputOption='USER_ENTERED',
+                    body={'values': [matrix_headers]}
+                ).execute()
+                
+                print('AnswersMatrix sheet has been set up successfully')
+        except Exception as e:
+            print(f"Error setting up AnswersMatrix sheet: {e}")
+            # Continue even if setting up the matrix fails
+        
         print('Google Sheet has been set up successfully')
         return True
     
@@ -340,6 +370,145 @@ def create_sheet_if_needed(sheet_id=None):
     except Exception as e:
         print(f'An unexpected error occurred: {e}')
         return False
+
+def get_column_letter(index):
+    """
+    Convert a 1-based column index to Excel-style column letter (A, B, C, ..., Z, AA, AB, etc.)
+    
+    Args:
+        index: 1-based column index
+        
+    Returns:
+        Excel-style column letter
+    """
+    result = ""
+    while index > 0:
+        index, remainder = divmod(index - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+def update_answers_matrix(sheet_id=None):
+    """
+    Update the AnswersMatrix sheet with all user answers arranged in a matrix format.
+    
+    Args:
+        sheet_id: Google Sheet ID (optional, will use config if not provided)
+        
+    Returns:
+        Dict: Success status and count or error message
+    """
+    try:
+        from recruitment.models import Question, Answer
+        from accounts.models import CustomUser
+        from core.models import GoogleSheetsConfig
+        
+        # Get the Google Sheets configuration
+        config = GoogleSheetsConfig.objects.first()
+        if not config or not config.enabled:
+            return {"success": False, "error": "Google Sheets integration is not enabled in settings"}
+        
+        # Use provided sheet_id or get from config
+        if not sheet_id:
+            sheet_id = config.spreadsheet_id
+            
+        if not sheet_id:
+            return {"success": False, "error": "No spreadsheet ID provided or configured"}
+        
+        # Ensure the sheet structure is set up
+        if not create_sheet_if_needed(sheet_id):
+            return {"success": False, "error": "Failed to set up the Google Sheet structure"}
+        
+        sheets = get_service()
+        if not sheets:
+            return {"success": False, "error": "Failed to get sheets service"}
+        
+        # Get all questions ordered by stage and order
+        questions = Question.objects.all().order_by('stage__stage_number', 'order')
+        
+        # Map of question IDs to column indices
+        # First 4 columns are for user info, questions start at column 5 (index 4)
+        question_map = {q.id: idx + 4 for idx, q in enumerate(questions)}
+        
+        # Get all users with at least one answer
+        users = CustomUser.objects.filter(answers__isnull=False).distinct()
+        
+        # Prepare data for the matrix
+        matrix_data = []
+        
+        # First row is already set up with headers
+        
+        # Add a row for each user
+        for user in users:
+            # Start with user info
+            user_row = [""] * (4 + len(questions))  # 4 user info columns + all questions
+            user_row[0] = user.email
+            user_row[1] = user.first_name
+            user_row[2] = user.last_name
+            user_row[3] = user.phone_number if hasattr(user, 'phone_number') else ""
+            
+            # Get all answers for this user
+            answers = Answer.objects.filter(user=user)
+            
+            # Fill in answers
+            for answer in answers:
+                col_idx = question_map.get(answer.question_id)
+                if col_idx is not None:
+                    # Format answers based on question type
+                    if answer.question.question_type == 'file' and answer.file_upload:
+                        # For file uploads, add a link
+                        from django.conf import settings
+                        if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
+                            user_row[col_idx] = f"{settings.BASE_URL}{answer.file_upload.url}"
+                        else:
+                            user_row[col_idx] = f"File: {answer.file_upload.name.split('/')[-1]}"
+                    elif answer.question.question_type == 'dob' and answer.answer_text:
+                        # Format dates
+                        try:
+                            from datetime import datetime
+                            date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
+                            user_row[col_idx] = date_obj.strftime('%d.%m.%Y')
+                        except:
+                            user_row[col_idx] = answer.answer_text
+                    else:
+                        # Standard text answer
+                        user_row[col_idx] = answer.answer_text
+            
+            matrix_data.append(user_row)
+        
+        # Clear existing data (except headers) and update with new data
+        try:
+            # Calculate the target range
+            # Headers are already set up at row 1, data starts at row 2
+            data_row_start = config.data_start_row if config.has_header_row else 2
+            
+            # First clear existing data
+            sheets.values().clear(
+                spreadsheetId=sheet_id,
+                range=f"AnswersMatrix!A{data_row_start}:ZZ1000"  # Clear a large range
+            ).execute()
+            
+            # Skip update if no data
+            if not matrix_data:
+                return {"success": True, "count": 0}
+            
+            # Update with new data
+            last_col = get_column_letter(4 + len(questions))
+            sheets.values().update(
+                spreadsheetId=sheet_id,
+                range=f"AnswersMatrix!A{data_row_start}:{last_col}{data_row_start + len(matrix_data) - 1}",
+                valueInputOption="RAW",
+                body={"values": matrix_data}
+            ).execute()
+            
+            return {"success": True, "count": len(matrix_data)}
+        except Exception as e:
+            print(f"Error updating AnswersMatrix sheet: {e}")
+            return {"success": False, "error": f"Error updating AnswersMatrix sheet: {str(e)}"}
+    
+    except Exception as e:
+        print(f"Unexpected error in update_answers_matrix: {e}")
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
 
 def sync_questions_to_sheets():
     """Sync all questions to Google Sheets with proper numbering and ordering"""
@@ -413,6 +582,9 @@ def sync_questions_to_sheets():
                 valueInputOption="RAW",
                 body={"values": data}
             ).execute()
+            
+            # Also update the answers matrix
+            update_answers_matrix(sheet_id)
             
             return {"success": True, "count": len(questions)}
         except Exception as e:

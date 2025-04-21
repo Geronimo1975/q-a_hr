@@ -211,15 +211,44 @@ class QuestionAdmin(admin.ModelAdmin):
         
         Note: This syncs ALL questions, not just the selected ones,
         since the ordering needs to be consistent across all stages.
+        Also updates the answer matrix structure.
         """
-        from utils.google_sheets import sync_questions_to_sheets
+        from utils.google_sheets import sync_questions_to_sheets, update_answers_matrix
+        from core.models import GoogleSheetsConfig
         
+        # Get the Google Sheets configuration
+        config = GoogleSheetsConfig.objects.first()
+        if not config or not config.enabled:
+            self.message_user(request, "Google Sheets integration is disabled in settings", level=messages.ERROR)
+            return
+        
+        sheet_id = config.spreadsheet_id
+        if not sheet_id:
+            self.message_user(request, "No spreadsheet ID specified in settings", level=messages.ERROR)
+            return
+        
+        # Sync questions first
         result = sync_questions_to_sheets()
         if result['success']:
             self.message_user(request, f"Successfully synced {result['count']} questions to Google Sheets", messages.SUCCESS)
+            
+            # Then update the answers matrix
+            matrix_result = update_answers_matrix(sheet_id)
+            if matrix_result['success']:
+                self.message_user(
+                    request, 
+                    f"Successfully updated the answers matrix with {matrix_result.get('count', 0)} user entries",
+                    level=messages.SUCCESS
+                )
+            else:
+                self.message_user(
+                    request, 
+                    f"Questions synced but failed to update answers matrix: {matrix_result.get('error', 'Unknown error')}",
+                    level=messages.WARNING
+                )
         else:
             self.message_user(request, f"Error syncing questions: {result['error']}", messages.ERROR)
-    sync_to_google_sheets.short_description = "Sync all questions to Google Sheets (ignores selection)"
+    sync_to_google_sheets.short_description = "Sync all questions to Google Sheets and update answers matrix"
     
     def reorder_link(self, obj):
         """Link to the reorder page"""
@@ -281,7 +310,7 @@ class AnswerAdmin(admin.ModelAdmin):
     list_display = ('user', 'question', 'get_answer_display_admin', 'file_link', 'submitted_at')
     list_filter = ('question__stage', 'question__question_type', 'submitted_at')
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'answer_text')
-    actions = ['export_as_csv', 'export_to_google_sheets']
+    actions = ['export_as_csv', 'export_to_google_sheets', 'update_answers_matrix']
     readonly_fields = ('file_preview',)
     
     def get_answer_display_admin(self, obj):
@@ -404,6 +433,43 @@ class AnswerAdmin(admin.ModelAdmin):
             )
     
     export_to_google_sheets.short_description = "Export selected answers to Google Sheets"
+    
+    def update_answers_matrix(self, request, queryset):
+        """
+        Update the AnswersMatrix sheet in Google Sheets with all user answers
+        in a matrix format with questions as columns and users as rows.
+        """
+        from core.models import GoogleSheetsConfig
+        from utils.google_sheets import update_answers_matrix
+        
+        # Get the Google Sheets configuration
+        config = GoogleSheetsConfig.objects.first()
+        if not config or not config.enabled:
+            self.message_user(request, "Google Sheets integration is disabled in settings", level=messages.ERROR)
+            return
+        
+        sheet_id = config.spreadsheet_id
+        if not sheet_id:
+            self.message_user(request, "No spreadsheet ID specified in settings", level=messages.ERROR)
+            return
+        
+        # Update the matrix
+        result = update_answers_matrix(sheet_id)
+        
+        if result.get('success'):
+            self.message_user(
+                request, 
+                f"Successfully updated the answers matrix with {result.get('count', 0)} user entries",
+                level=messages.SUCCESS
+            )
+        else:
+            self.message_user(
+                request, 
+                f"Failed to update answers matrix: {result.get('error', 'Unknown error')}",
+                level=messages.ERROR
+            )
+    
+    update_answers_matrix.short_description = "Update answers matrix in Google Sheets"
 
 
 @admin.register(ApplicationSource)

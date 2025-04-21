@@ -1,11 +1,14 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.conf import settings
+from django.http import HttpResponseRedirect
+from django.urls import path
+from django.contrib import messages
 from .models import GoogleSheetsConfig, EditableContent
 
 
 class GoogleSheetsConfigAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'enabled', 'spreadsheet_id_display')
+    list_display = ('__str__', 'enabled', 'spreadsheet_id_display', 'sync_matrix_button')
     readonly_fields = ('spreadsheet_id_display',)
     fieldsets = (
         (None, {
@@ -23,6 +26,59 @@ class GoogleSheetsConfigAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'sync_answers_matrix/',
+                self.admin_site.admin_view(self.sync_answers_matrix),
+                name='sync-answers-matrix',
+            ),
+        ]
+        return custom_urls + urls
+    
+    def sync_answers_matrix(self, request):
+        """Sync all answers to the AnswersMatrix sheet"""
+        from utils.google_sheets import update_answers_matrix
+        
+        # Get the active configuration
+        config = GoogleSheetsConfig.objects.first()
+        if not config or not config.enabled:
+            self.message_user(request, "Google Sheets integration is disabled", level=messages.ERROR)
+            return HttpResponseRedirect("../")
+            
+        sheet_id = config.spreadsheet_id
+        if not sheet_id:
+            self.message_user(request, "No spreadsheet ID configured", level=messages.ERROR)
+            return HttpResponseRedirect("../")
+            
+        # Update the matrix
+        result = update_answers_matrix(sheet_id)
+        
+        if result.get('success'):
+            self.message_user(
+                request, 
+                f"Successfully updated the answers matrix with {result.get('count', 0)} user entries",
+                level=messages.SUCCESS
+            )
+        else:
+            self.message_user(
+                request, 
+                f"Failed to update answers matrix: {result.get('error', 'Unknown error')}",
+                level=messages.ERROR
+            )
+            
+        return HttpResponseRedirect("../")
+    
+    def sync_matrix_button(self, obj):
+        if obj.enabled and obj.spreadsheet_id:
+            return format_html(
+                '<a class="button" href="{}">Sync Answers Matrix</a>',
+                'sync_answers_matrix/'
+            )
+        return '—'
+    sync_matrix_button.short_description = 'Actions'
     
     def spreadsheet_id_display(self, obj):
         if obj.spreadsheet_id:
