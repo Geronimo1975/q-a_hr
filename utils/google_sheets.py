@@ -377,7 +377,7 @@ def update_answers_matrix(sheet_id=None):
         Dict: Success status and count or error message
     """
     try:
-        from recruitment.models import Question, Answer, Stage
+        from recruitment.models import Question, Answer, QuestionStage
         from accounts.models import CustomUser
         from core.models import GoogleSheetsConfig
         
