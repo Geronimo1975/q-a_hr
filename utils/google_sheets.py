@@ -277,7 +277,7 @@ def create_sheet_if_needed(sheet_id=None):
         
         # Check if required sheets already exist
         existing_sheets = [sheet['properties']['title'] for sheet in spreadsheet['sheets']]
-        needed_sheets = ['Stage1', 'Stage2', 'Stage3', 'AnswersMatrix']
+        needed_sheets = ['Stage1', 'Stage2', 'Stage3', 'Questions', 'AnswersMatrix']
         
         batch_update_requests = []
         
@@ -296,7 +296,8 @@ def create_sheet_if_needed(sheet_id=None):
         headers = {
             'Stage1': ['Marcaj de timp', 'GDPR Agreement', 'Numele', 'Prenumele', 'CNP (Cod Numeric Personal)', 'Domiciliul sau reședința', 'Număr de telefon', 'Adresa de E-mail', 'Opțiunea primită', 'Țara de reședință', 'Încărcare document'],
             'Stage2': ['Marcaj de timp', 'GDPR Agreement', 'Numele', 'Prenumele', 'CNP (Cod Numeric Personal)', 'Domiciliul sau reședința', 'Număr de telefon', 'Adresa de E-mail', 'Opțiunea primită', 'Țara de reședință', 'Încărcare document'],
-            'Stage3': ['Marcaj de timp', 'GDPR Agreement', 'Numele', 'Prenumele', 'CNP (Cod Numeric Personal)', 'Domiciliul sau reședința', 'Număr de telefon', 'Adresa de E-mail', 'Opțiunea primită', 'Țara de reședință', 'Încărcare document']
+            'Stage3': ['Marcaj de timp', 'GDPR Agreement', 'Numele', 'Prenumele', 'CNP (Cod Numeric Personal)', 'Domiciliul sau reședința', 'Număr de telefon', 'Adresa de E-mail', 'Opțiunea primită', 'Țara de reședință', 'Încărcare document'],
+            'Questions': ['Nr.', 'Question', 'Question Type', 'Stage', 'Required']
         }
         
         # Calculate range for headers based on configuration
@@ -321,9 +322,16 @@ def create_sheet_if_needed(sheet_id=None):
                 if sheet_name in existing_sheets or sheet_name in needed_sheets:
                     # Put headers in the configured header row
                     target_row = config.header_row_index if config.has_header_row else 1
+                    
+                    # Use appropriate column range based on sheet name
+                    if sheet_name == 'Questions':
+                        column_range = f"A{target_row}:E{target_row}"  # A through E for Questions sheet
+                    else:
+                        column_range = f"A{target_row}:K{target_row}"  # A through K for stage sheets
+                    
                     sheets.values().update(
                         spreadsheetId=sheet_id,
-                        range=f"{sheet_name}!A{target_row}:K{target_row}",
+                        range=f"{sheet_name}!{column_range}",
                         valueInputOption='USER_ENTERED',
                         body={'values': [header]}
                     ).execute()
@@ -521,24 +529,29 @@ def sync_questions_to_sheets():
             return {"success": False, "error": "Could not initialize Google Sheets service. Check API key and credentials."}
         
         # Get all questions ordered by stage and order
-        from recruitment.models import Question
+        from recruitment.models import Question, Answer
         questions = Question.objects.all().order_by('stage__stage_number', 'order')
         
-        # Get all users with at least one answer
-        users = CustomUser.objects.filter(answers__isnull=False).distinct()
+        # Only include questions that actually exist in the database
+        if not questions.exists():
+            return {"success": False, "error": "No questions found in the database. Please add questions first."}
+            
+        # Prepare data - Headers first, according to the specific format
+        data = [
+            ["Nr.", "Question", "Question Type", "Stage", "Required"]
+        ]
         
-        # Prepare data - Base headers first (user columns will be added after)
-        headers = ["Nr.", "Question", "Question Type", "Stage", "Required"]
+        # Fetch all answers from the database for efficiency
+        all_answers = Answer.objects.select_related('user', 'question').all()
         
-        # Add user emails to headers starting at column F
-        user_emails = [user.email for user in users]
-        
-        # Prepare data array with fixed columns plus user columns
-        data = [headers + user_emails]
-        
+        # Create a dictionary of {(user_id, question_id): answer} for fast lookup
+        answer_dict = {}
+        for answer in all_answers:
+            answer_dict[(answer.user_id, answer.question_id)] = answer
+            
         # Add questions with sequential numbering
         for i, question in enumerate(questions, 1):
-            # Prepare row with fixed columns
+            # Add question details
             row = [
                 i,  # Sequential number
                 question.question_text,
@@ -546,68 +559,17 @@ def sync_questions_to_sheets():
                 f"{question.stage.stage_number}: {question.stage.stage_name}",
                 "Yes" if question.is_required else "No"
             ]
-            
-            # Add answer for each user
-            for user in users:
-                # Find this user's answer to this question
-                from recruitment.models import Answer
-                try:
-                    answer = Answer.objects.get(user=user, question=question)
-                    
-                    # Format answer based on question type
-                    if question.question_type == 'file' and answer.file_upload:
-                        # For file uploads, add a link
-                        from django.conf import settings
-                        if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
-                            row.append(f"{settings.BASE_URL}{answer.file_upload.url}")
-                        else:
-                            row.append(f"File: {answer.file_upload.name.split('/')[-1]}")
-                    elif question.question_type == 'dob' and answer.answer_text:
-                        # Format dates
-                        try:
-                            from datetime import datetime
-                            date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
-                            row.append(date_obj.strftime('%d.%m.%Y'))
-                        except:
-                            row.append(answer.answer_text)
-                    else:
-                        # Standard text answer
-                        row.append(answer.answer_text)
-                except Answer.DoesNotExist:
-                    # No answer for this question
-                    row.append("")
-            
-            # Add row to data
             data.append(row)
         
-        # Create a Questions sheet if it doesn't exist
+        # Add data to Google Sheets
         try:
-            spreadsheet = sheets.get(spreadsheetId=sheet_id).execute()
-            existing_sheets = [sheet['properties']['title'] for sheet in spreadsheet['sheets']]
-            
-            if 'Questions' not in existing_sheets:
-                sheets.batchUpdate(
-                    spreadsheetId=sheet_id,
-                    body={'requests': [{'addSheet': {'properties': {'title': 'Questions'}}}]}
-                ).execute()
-                print("Created 'Questions' sheet")
-        except Exception as e:
-            print(f"Error checking/creating Questions sheet: {e}")
-            return {"success": False, "error": f"Error setting up Questions sheet: {str(e)}"}
-        
-        # Calculate start row based on header row configuration
-        start_row = config.data_start_row if config.has_header_row else 1
-        
-        # Clear existing data and update with new data
-        try:
-            # Calculate the last column letter based on number of users
-            last_col = get_column_letter(5 + len(users))  # 5 fixed columns + user columns
-            
+            # Clear existing questions data
             sheets.values().clear(
                 spreadsheetId=sheet_id,
-                range=f"Questions!A:ZZ"
+                range="Questions!A1:E1000"  # Clear only fixed columns
             ).execute()
             
+            # Add question data (A-E columns)
             sheets.values().update(
                 spreadsheetId=sheet_id,
                 range="Questions!A1",
@@ -615,12 +577,72 @@ def sync_questions_to_sheets():
                 body={"values": data}
             ).execute()
             
-            # Also update the answers matrix
+            # Now let's add user data in columns starting from F
+            # Get all users with at least one answer
+            users = CustomUser.objects.filter(answers__isnull=False).distinct()
+            
+            # No users with answers yet, so just return success
+            if not users.exists():
+                return {"success": True, "count": len(questions)}
+                
+            # Add user emails as headers in row 1, starting at column F
+            user_headers = [["user" + str(i+1)] for i in range(len(users))]
+            if user_headers:
+                sheets.values().update(
+                    spreadsheetId=sheet_id,
+                    range="Questions!F1",
+                    valueInputOption="RAW",
+                    body={"values": [["user" + str(i+1) for i in range(len(users))]]}
+                ).execute()
+            
+            # For each user, add their answers in the corresponding column
+            for user_idx, user in enumerate(users):
+                # Column F is the first user column (index 5)
+                user_col = get_column_letter(6 + user_idx)  # F, G, H, etc.
+                
+                # For each question, get this user's answer
+                user_answers = []
+                for question_idx, question in enumerate(questions):
+                    row_idx = question_idx + 2  # Questions start at row 2
+                    
+                    # Look up the answer
+                    answer = answer_dict.get((user.id, question.id))
+                    
+                    if answer:
+                        # Format the answer based on question type
+                        if question.question_type == 'file' and answer.file_upload:
+                            # For file uploads, add a link
+                            from django.conf import settings
+                            if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
+                                formatted_answer = f"{settings.BASE_URL}{answer.file_upload.url}"
+                            else:
+                                formatted_answer = f"File: {answer.file_upload.name.split('/')[-1]}"
+                        elif question.question_type == 'dob' and answer.answer_text:
+                            # Format dates
+                            try:
+                                from datetime import datetime
+                                date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
+                                formatted_answer = date_obj.strftime('%d.%m.%Y')
+                            except:
+                                formatted_answer = answer.answer_text
+                        else:
+                            # Standard text answer
+                            formatted_answer = answer.answer_text
+                            
+                        # Add the answer to the user's column at the question's row
+                        sheets.values().update(
+                            spreadsheetId=sheet_id,
+                            range=f"Questions!{user_col}{row_idx}",
+                            valueInputOption="RAW",
+                            body={"values": [[formatted_answer]]}
+                        ).execute()
+            
+            # Also update the answers matrix when we're done
             update_answers_matrix(sheet_id)
             
             return {"success": True, "count": len(questions)}
         except Exception as e:
-            print(f"Error updating Questions sheet data: {e}")
+            print(f"Error updating Questions sheet: {e}")
             return {"success": False, "error": f"Error updating Questions sheet: {str(e)}"}
             
     except Exception as e:
