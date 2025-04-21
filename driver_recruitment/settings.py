@@ -208,16 +208,29 @@ SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'fastdelivery@gti-europe.de')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
+# Enable SMTP settings for SendGrid
+EMAIL_HOST = 'smtp.sendgrid.net'
+EMAIL_HOST_USER = 'apikey'  # This is exactly the string 'apikey'
+EMAIL_HOST_PASSWORD = SENDGRID_API_KEY
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
 # Toggle sandbox mode (when True, emails are logged but not sent)
-SENDGRID_SANDBOX_MODE_IN_DEBUG = DEBUG
+SENDGRID_SANDBOX_MODE_IN_DEBUG = False  # Disable sandbox mode to send real emails
 # Echo to stdout when in sandbox mode and emails are not sent
 SENDGRID_ECHO_TO_STDOUT = True
 
 # Email template configuration for reset password and other emails
 ACCOUNT_EMAIL_SUBJECT_PREFIX = "FastDelivery - "
-ACCOUNT_DEFAULT_HTTP_PROTOCOL = "https"
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = "https"  # Use HTTPS for links in emails
 ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
 ACCOUNT_EMAIL_VERIFICATION = "optional"
+
+# Additional allauth settings for better email functionality
+ACCOUNT_CONFIRM_EMAIL_ON_GET = True  # Allow confirming email on GET request
+ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = False  # Don't logout after password change
+ACCOUNT_LOGIN_ON_PASSWORD_RESET = True  # Log user in after they reset their password
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True  # Log user in after they confirm their email
 
 # Google Sheets Integration
 GOOGLE_SHEETS = {
