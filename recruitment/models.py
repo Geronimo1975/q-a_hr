@@ -32,6 +32,11 @@ class Question(models.Model):
     allowed_file_types = models.CharField(max_length=100, blank=True, help_text="Allowed file types for uploads (e.g., 'pdf,jpg,png')")
     max_file_size = models.IntegerField(default=5, help_text="Maximum file size in MB (default: 5)")
     
+    # Google Sheets integration fields
+    sheets_column = models.CharField(max_length=10, blank=True, help_text="Google Sheets column (e.g., 'C' for the question text)")
+    sheets_answer_column = models.CharField(max_length=10, blank=True, help_text="Google Sheets column for the answer (e.g., 'F')")
+    sheets_row_offset = models.IntegerField(default=0, help_text="Row offset in Google Sheets (0 = use default row based on order)")
+    
     def __str__(self):
         return f"{self.stage.stage_number}.{self.order}: {self.question_text[:50]}"
         

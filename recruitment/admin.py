@@ -121,7 +121,7 @@ class FileUploadTypeFilter(admin.SimpleListFilter):
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
-    list_display = ('question_text', 'stage', 'question_type', 'get_type_details', 'is_required', 'order', 'reorder_link')
+    list_display = ('question_text', 'stage', 'question_type', 'get_type_details', 'is_required', 'order', 'sheets_columns_display', 'reorder_link')
     list_filter = ('stage', 'question_type', 'is_required', FileUploadTypeFilter)
     search_fields = ('question_text',)
     list_editable = ('order',)  # Allow editing order directly in the list view
@@ -139,6 +139,11 @@ class QuestionAdmin(admin.ModelAdmin):
             'fields': ('allowed_file_types', 'max_file_size'),
             'classes': ('collapse',),
             'description': 'Configure file upload settings (only applicable if question type is "File Upload")'
+        }),
+        ('Google Sheets Integration', {
+            'fields': ('sheets_column', 'sheets_answer_column', 'sheets_row_offset'),
+            'classes': ('collapse',),
+            'description': 'Configure how this question is mapped to Google Sheets. Leave empty to use default values from global settings.'
         }),
     )
     
@@ -230,6 +235,25 @@ class QuestionAdmin(admin.ModelAdmin):
             return f"Choice ({len(options)} options)"
         return obj.get_question_type_display()
     get_type_details.short_description = "Type Details"
+    
+    def sheets_columns_display(self, obj):
+        from django.utils.html import format_html
+        
+        # Determine columns (use defaults or custom settings)
+        from core.models import GoogleSheetsConfig
+        config = GoogleSheetsConfig.objects.first()
+        
+        if not config:
+            return "-"
+            
+        q_col = obj.sheets_column or config.question_column or "C"
+        a_col = obj.sheets_answer_column or config.answer_column or "F"
+        
+        return format_html(
+            '<span style="font-family: monospace">Q:{} A:{}</span>',
+            q_col, a_col
+        )
+    sheets_columns_display.short_description = "Sheets Columns"
     
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)

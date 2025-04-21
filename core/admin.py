@@ -12,6 +12,16 @@ class GoogleSheetsConfigAdmin(admin.ModelAdmin):
             'fields': ('enabled', 'spreadsheet_id', 'spreadsheet_id_display'),
             'description': 'Configure Google Sheets integration for exporting application data.'
         }),
+        ('Row Configuration', {
+            'fields': ('has_header_row', 'header_row_index', 'data_start_row'),
+            'description': 'Configure row settings for the Google Sheet.',
+            'classes': ('collapse',),
+        }),
+        ('Default Column Mapping', {
+            'fields': ('question_column', 'answer_column'),
+            'description': 'Set default columns to use for questions and answers. These can be overridden per question.',
+            'classes': ('collapse',),
+        }),
     )
     
     def spreadsheet_id_display(self, obj):

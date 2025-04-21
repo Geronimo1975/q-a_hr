@@ -9,9 +9,12 @@ from django.conf import settings
 def get_credentials():
     """Obtain credentials for Google Sheets access using service account."""
     try:
-        # Check if Google Sheets integration is enabled
-        if not settings.GOOGLE_SHEETS.get('enabled'):
-            print("Google Sheets integration is disabled in settings")
+        # Check if Google Sheets integration is enabled in the database config
+        from core.models import GoogleSheetsConfig
+        config = GoogleSheetsConfig.objects.first()
+        
+        if not config or not config.enabled:
+            print("Google Sheets integration is disabled in database settings")
             return None
             
         # Get the path to the credentials file
