@@ -331,31 +331,10 @@ def create_sheet_if_needed(sheet_id=None):
                 print(f"Error adding header to {sheet_name}: {error}")
                 # Continue with other sheets even if one fails
         
-        # Now set up the answers matrix tab with questions as headers
+        # We'll set up the AnswersMatrix dynamically via the update_answers_matrix function
+        # so we don't need to set up headers here
         try:
-            from recruitment.models import Question
-            
             if 'AnswersMatrix' in existing_sheets or 'AnswersMatrix' in needed_sheets:
-                # First column is for user information
-                matrix_headers = ['User Email', 'First Name', 'Last Name', 'Phone Number']
-                
-                # Get all questions ordered by stage and order for column headers
-                questions = Question.objects.all().order_by('stage__stage_number', 'order')
-                
-                # Add question text as column headers
-                for question in questions:
-                    q_header = f"Stage {question.stage.stage_number}.{question.order}: {question.question_text[:50]}"
-                    matrix_headers.append(q_header)
-                
-                # Put headers in the configured header row
-                target_row = config.header_row_index if config.has_header_row else 1
-                sheets.values().update(
-                    spreadsheetId=sheet_id,
-                    range=f"AnswersMatrix!A{target_row}:{get_column_letter(len(matrix_headers))}{target_row}",
-                    valueInputOption='USER_ENTERED',
-                    body={'values': [matrix_headers]}
-                ).execute()
-                
                 print('AnswersMatrix sheet has been set up successfully')
         except Exception as e:
             print(f"Error setting up AnswersMatrix sheet: {e}")
@@ -398,7 +377,7 @@ def update_answers_matrix(sheet_id=None):
         Dict: Success status and count or error message
     """
     try:
-        from recruitment.models import Question, Answer
+        from recruitment.models import Question, Answer, Stage
         from accounts.models import CustomUser
         from core.models import GoogleSheetsConfig
         
@@ -425,82 +404,94 @@ def update_answers_matrix(sheet_id=None):
         # Get all questions ordered by stage and order
         questions = Question.objects.all().order_by('stage__stage_number', 'order')
         
-        # Map of question IDs to column indices
-        # First 4 columns are for user info, questions start at column 5 (index 4)
-        question_map = {q.id: idx + 4 for idx, q in enumerate(questions)}
-        
         # Get all users with at least one answer
         users = CustomUser.objects.filter(answers__isnull=False).distinct()
         
-        # Prepare data for the matrix
-        matrix_data = []
+        # Prepare column headers
+        # First columns for user info
+        headers = ["User Email", "First Name", "Last Name", "Phone Number"]
         
-        # First row is already set up with headers
+        # Add stage name, stage number and question order to each question for headers
+        question_headers = []
+        for question in questions:
+            header = f"Stage {question.stage.stage_number}.{question.order}: {question.question_text[:50]}"
+            question_headers.append(header)
+        
+        headers.extend(question_headers)
+        
+        # Prepare data for the matrix
+        matrix_data = [headers]  # First row is headers
         
         # Add a row for each user
         for user in users:
             # Start with user info
-            user_row = [""] * (4 + len(questions))  # 4 user info columns + all questions
-            user_row[0] = user.email
-            user_row[1] = user.first_name
-            user_row[2] = user.last_name
-            user_row[3] = user.phone_number if hasattr(user, 'phone_number') else ""
+            user_row = [
+                user.email,
+                user.first_name,
+                user.last_name,
+                user.phone_number if hasattr(user, 'phone_number') else ""
+            ]
             
             # Get all answers for this user
-            answers = Answer.objects.filter(user=user)
+            answers_dict = {}
+            for answer in Answer.objects.filter(user=user):
+                answers_dict[answer.question_id] = answer
             
-            # Fill in answers
-            for answer in answers:
-                col_idx = question_map.get(answer.question_id)
-                if col_idx is not None:
-                    # Format answers based on question type
-                    if answer.question.question_type == 'file' and answer.file_upload:
+            # Add each question's answer in order
+            for question in questions:
+                answer = answers_dict.get(question.id)
+                if answer:
+                    # Format answer based on question type
+                    if question.question_type == 'file' and answer.file_upload:
                         # For file uploads, add a link
                         from django.conf import settings
                         if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
-                            user_row[col_idx] = f"{settings.BASE_URL}{answer.file_upload.url}"
+                            user_row.append(f"{settings.BASE_URL}{answer.file_upload.url}")
                         else:
-                            user_row[col_idx] = f"File: {answer.file_upload.name.split('/')[-1]}"
-                    elif answer.question.question_type == 'dob' and answer.answer_text:
+                            user_row.append(f"File: {answer.file_upload.name.split('/')[-1]}")
+                    elif question.question_type == 'dob' and answer.answer_text:
                         # Format dates
                         try:
                             from datetime import datetime
                             date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
-                            user_row[col_idx] = date_obj.strftime('%d.%m.%Y')
+                            user_row.append(date_obj.strftime('%d.%m.%Y'))
                         except:
-                            user_row[col_idx] = answer.answer_text
+                            user_row.append(answer.answer_text)
                     else:
                         # Standard text answer
-                        user_row[col_idx] = answer.answer_text
+                        user_row.append(answer.answer_text)
+                else:
+                    # No answer for this question
+                    user_row.append("")
             
             matrix_data.append(user_row)
         
-        # Clear existing data (except headers) and update with new data
+        # Clear existing data and update with new data
         try:
-            # Calculate the target range
-            # Headers are already set up at row 1, data starts at row 2
-            data_row_start = config.data_start_row if config.has_header_row else 2
-            
             # First clear existing data
             sheets.values().clear(
                 spreadsheetId=sheet_id,
-                range=f"AnswersMatrix!A{data_row_start}:ZZ1000"  # Clear a large range
+                range=f"AnswersMatrix!A1:ZZ1000"  # Clear the whole sheet
             ).execute()
             
             # Skip update if no data
-            if not matrix_data:
+            if len(matrix_data) == 1:  # Just headers, no user data
                 return {"success": True, "count": 0}
             
+            # Calculate the range
+            rows = len(matrix_data)
+            cols = len(headers)
+            last_col = get_column_letter(cols)
+            
             # Update with new data
-            last_col = get_column_letter(4 + len(questions))
             sheets.values().update(
                 spreadsheetId=sheet_id,
-                range=f"AnswersMatrix!A{data_row_start}:{last_col}{data_row_start + len(matrix_data) - 1}",
+                range=f"AnswersMatrix!A1:{last_col}{rows}",
                 valueInputOption="RAW",
                 body={"values": matrix_data}
             ).execute()
             
-            return {"success": True, "count": len(matrix_data)}
+            return {"success": True, "count": len(matrix_data) - 1}  # Subtract 1 for the header row
         except Exception as e:
             print(f"Error updating AnswersMatrix sheet: {e}")
             return {"success": False, "error": f"Error updating AnswersMatrix sheet: {str(e)}"}
@@ -515,6 +506,7 @@ def sync_questions_to_sheets():
     try:
         # Get Google Sheets configuration from database
         from core.models import GoogleSheetsConfig
+        from accounts.models import CustomUser
         config = GoogleSheetsConfig.objects.first()
         
         if not config or not config.enabled:
@@ -528,28 +520,65 @@ def sync_questions_to_sheets():
         if not sheets:
             return {"success": False, "error": "Could not initialize Google Sheets service. Check API key and credentials."}
         
-        # Prepare data - Headers first
-        data = [["Nr.", "Question", "Question Type", "Stage", "Required", "Google Sheets Column", "Answer Column"]]
-        
         # Get all questions ordered by stage and order
         from recruitment.models import Question
         questions = Question.objects.all().order_by('stage__stage_number', 'order')
         
+        # Get all users with at least one answer
+        users = CustomUser.objects.filter(answers__isnull=False).distinct()
+        
+        # Prepare data - Base headers first (user columns will be added after)
+        headers = ["Nr.", "Question", "Question Type", "Stage", "Required"]
+        
+        # Add user emails to headers starting at column F
+        user_emails = [user.email for user in users]
+        
+        # Prepare data array with fixed columns plus user columns
+        data = [headers + user_emails]
+        
         # Add questions with sequential numbering
         for i, question in enumerate(questions, 1):
-            # Get custom column settings if specified
-            question_column = question.sheets_column or config.question_column or "C"
-            answer_column = question.sheets_answer_column or config.answer_column or "F"
-            
-            data.append([
+            # Prepare row with fixed columns
+            row = [
                 i,  # Sequential number
                 question.question_text,
                 dict(Question.QUESTION_TYPES).get(question.question_type, question.question_type),
                 f"{question.stage.stage_number}: {question.stage.stage_name}",
-                "Yes" if question.is_required else "No",
-                question_column,  # Custom column for question (or default)
-                answer_column     # Custom column for answer (or default)
-            ])
+                "Yes" if question.is_required else "No"
+            ]
+            
+            # Add answer for each user
+            for user in users:
+                # Find this user's answer to this question
+                from recruitment.models import Answer
+                try:
+                    answer = Answer.objects.get(user=user, question=question)
+                    
+                    # Format answer based on question type
+                    if question.question_type == 'file' and answer.file_upload:
+                        # For file uploads, add a link
+                        from django.conf import settings
+                        if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
+                            row.append(f"{settings.BASE_URL}{answer.file_upload.url}")
+                        else:
+                            row.append(f"File: {answer.file_upload.name.split('/')[-1]}")
+                    elif question.question_type == 'dob' and answer.answer_text:
+                        # Format dates
+                        try:
+                            from datetime import datetime
+                            date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
+                            row.append(date_obj.strftime('%d.%m.%Y'))
+                        except:
+                            row.append(answer.answer_text)
+                    else:
+                        # Standard text answer
+                        row.append(answer.answer_text)
+                except Answer.DoesNotExist:
+                    # No answer for this question
+                    row.append("")
+            
+            # Add row to data
+            data.append(row)
         
         # Create a Questions sheet if it doesn't exist
         try:
@@ -571,9 +600,12 @@ def sync_questions_to_sheets():
         
         # Clear existing data and update with new data
         try:
+            # Calculate the last column letter based on number of users
+            last_col = get_column_letter(5 + len(users))  # 5 fixed columns + user columns
+            
             sheets.values().clear(
                 spreadsheetId=sheet_id,
-                range="Questions!A:G"
+                range=f"Questions!A:ZZ"
             ).execute()
             
             sheets.values().update(
