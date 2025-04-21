@@ -356,11 +356,15 @@ class AnswerAdmin(admin.ModelAdmin):
     export_as_csv.short_description = "Export selected answers as CSV"
     
     def export_to_google_sheets(self, request, queryset):
-        if not settings.GOOGLE_SHEETS.get('enabled', False):
+        from core.models import GoogleSheetsConfig
+        
+        # Get the Google Sheets configuration
+        config = GoogleSheetsConfig.objects.first()
+        if not config or not config.enabled:
             self.message_user(request, "Google Sheets integration is disabled in settings", level=messages.ERROR)
             return
         
-        sheet_id = settings.GOOGLE_SHEETS.get('spreadsheet_id')
+        sheet_id = config.spreadsheet_id
         if not sheet_id:
             self.message_user(request, "No spreadsheet ID specified in settings", level=messages.ERROR)
             return

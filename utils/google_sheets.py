@@ -92,22 +92,33 @@ def append_row(values, sheet_id, range_name='Sheet1!A:Z'):
         print(f"An unexpected error occurred: {e}")
         return None
 
-def update_sheet_with_answers(user, stage, sheet_id):
+def update_sheet_with_answers(user, stage, sheet_id=None):
     """
     Update Google Sheet with user's answers for a specific stage.
     
     Args:
         user: Django User object
         stage: Stage number
-        sheet_id: Google Sheet ID
+        sheet_id: Google Sheet ID (optional, will use config if not provided)
     """
-    if not sheet_id:
-        print("No spreadsheet ID provided")
-        return False
-    
     try:
         from recruitment.models import Answer, Question
+        from core.models import GoogleSheetsConfig
         from django.conf import settings
+        
+        # Get the Google Sheets configuration
+        config = GoogleSheetsConfig.objects.first()
+        if not config or not config.enabled:
+            print("Google Sheets integration is not enabled in settings")
+            return False
+            
+        # Use provided sheet_id or get from config
+        if not sheet_id:
+            sheet_id = config.spreadsheet_id
+            
+        if not sheet_id:
+            print("No spreadsheet ID provided or configured")
+            return False
         
         # Get user answers for this stage
         answers = Answer.objects.filter(
@@ -132,11 +143,44 @@ def update_sheet_with_answers(user, stage, sheet_id):
             "",                              # Țara de reședință (Country - empty by default, will be filled if found)
         ]
         
+        # Dictionary to maintain custom answer positions
+        custom_positions = {}
+        
         # Process each answer and update the relevant fields in row_data or add as new columns
         for answer in answers:
             question_type = answer.question.question_type
             question_text = answer.question.question_text.lower()
             
+            # Check if this question has custom Google Sheets column mappings
+            if answer.question.sheets_column or answer.question.sheets_answer_column:
+                # Use custom column mapping (save for later insertion)
+                q_col = answer.question.sheets_column or config.question_column or "C"
+                a_col = answer.question.sheets_answer_column or config.answer_column or "F"
+                
+                # Convert column letters to indices (A=0, B=1, etc.)
+                a_idx = ord(a_col.upper()) - ord('A')
+                
+                # Save for later (we'll handle custom positions after the standard fields)
+                answer_value = answer.answer_text
+                if question_type == 'dob' and answer.answer_text:
+                    try:
+                        date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
+                        answer_value = date_obj.strftime('%d.%m.%Y')
+                    except:
+                        pass
+                        
+                # For file uploads, use file URL
+                if question_type == 'file' and answer.file_upload:
+                    if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
+                        answer_value = f"{settings.BASE_URL}{answer.file_upload.url}"
+                    else:
+                        answer_value = f"https://drive.google.com/file/d/{answer.file_upload.name}"
+                        
+                # Store the answer at the specified column position
+                custom_positions[a_idx] = answer_value
+                continue
+                
+            # Handle regular (non-custom position) fields
             # Update existing columns based on question content
             if 'cnp' in question_text or 'cod numeric personal' in question_text:
                 row_data[4] = answer.answer_text  # Update CNP field
@@ -172,6 +216,15 @@ def update_sheet_with_answers(user, stage, sheet_id):
                     else:
                         row_data.append(answer.answer_text)
         
+        # Insert custom position answers
+        for col_idx, value in sorted(custom_positions.items()):
+            # Expand row_data if needed to accommodate the custom position
+            while len(row_data) <= col_idx:
+                row_data.append("")
+            
+            # Set the value at the custom position
+            row_data[col_idx] = value
+        
         # Ensure the sheet exists first
         create_sheet_if_needed(sheet_id)
         
@@ -184,15 +237,30 @@ def update_sheet_with_answers(user, stage, sheet_id):
         print(f"Error updating sheet with answers: {e}")
         return False
 
-def create_sheet_if_needed(sheet_id):
+def create_sheet_if_needed(sheet_id=None):
     """
     Set up the Google Sheet with appropriate tabs for each stage.
-    """
-    if not sheet_id:
-        print("No spreadsheet ID provided")
-        return False
     
+    Args:
+        sheet_id: Google Sheet ID (optional, will use config if not provided)
+    """
     try:
+        from core.models import GoogleSheetsConfig
+        
+        # Get the Google Sheets configuration
+        config = GoogleSheetsConfig.objects.first()
+        if not config or not config.enabled:
+            print("Google Sheets integration is not enabled in settings")
+            return False
+        
+        # Use provided sheet_id or get from config
+        if not sheet_id:
+            sheet_id = config.spreadsheet_id
+            
+        if not sheet_id:
+            print("No spreadsheet ID provided or configured")
+            return False
+            
         sheets = get_service()
         if not sheets:
             print("Failed to get sheets service")
@@ -231,6 +299,9 @@ def create_sheet_if_needed(sheet_id):
             'Stage3': ['Marcaj de timp', 'GDPR Agreement', 'Numele', 'Prenumele', 'CNP (Cod Numeric Personal)', 'Domiciliul sau reședința', 'Număr de telefon', 'Adresa de E-mail', 'Opțiunea primită', 'Țara de reședință', 'Încărcare document']
         }
         
+        # Calculate range for headers based on configuration
+        header_range = f"1:{config.header_row_index}" if config.has_header_row else "1:1"
+        
         # Execute batch updates if any
         if batch_update_requests:
             try:
@@ -248,9 +319,11 @@ def create_sheet_if_needed(sheet_id):
             try:
                 # Only add headers if the sheet exists or was just created
                 if sheet_name in existing_sheets or sheet_name in needed_sheets:
+                    # Put headers in the configured header row
+                    target_row = config.header_row_index if config.has_header_row else 1
                     sheets.values().update(
                         spreadsheetId=sheet_id,
-                        range=f"{sheet_name}!A1:K1",
+                        range=f"{sheet_name}!A{target_row}:K{target_row}",
                         valueInputOption='USER_ENTERED',
                         body={'values': [header]}
                     ).execute()
@@ -271,21 +344,23 @@ def create_sheet_if_needed(sheet_id):
 def sync_questions_to_sheets():
     """Sync all questions to Google Sheets with proper numbering and ordering"""
     try:
-        # Get Google Sheets API key
-        api_key = os.environ.get('GOOGLE_SHEETS_API_KEY')
-        if not api_key:
-            return {"success": False, "error": "Google Sheets API key is not set in environment variables"}
+        # Get Google Sheets configuration from database
+        from core.models import GoogleSheetsConfig
+        config = GoogleSheetsConfig.objects.first()
+        
+        if not config or not config.enabled:
+            return {"success": False, "error": "Google Sheets integration is not enabled in settings"}
+        
+        sheet_id = config.spreadsheet_id
+        if not sheet_id:
+            return {"success": False, "error": "No spreadsheet ID configured in Google Sheets settings"}
         
         sheets = get_service()
         if not sheets:
             return {"success": False, "error": "Could not initialize Google Sheets service. Check API key and credentials."}
         
-        sheet_id = os.environ.get('GOOGLE_SHEETS_ID')
-        if not sheet_id:
-            return {"success": False, "error": "No spreadsheet ID configured in environment variables"}
-        
         # Prepare data - Headers first
-        data = [["Nr.", "Question", "Question Type", "Stage", "Required"]]
+        data = [["Nr.", "Question", "Question Type", "Stage", "Required", "Google Sheets Column", "Answer Column"]]
         
         # Get all questions ordered by stage and order
         from recruitment.models import Question
@@ -293,12 +368,18 @@ def sync_questions_to_sheets():
         
         # Add questions with sequential numbering
         for i, question in enumerate(questions, 1):
+            # Get custom column settings if specified
+            question_column = question.sheets_column or config.question_column or "C"
+            answer_column = question.sheets_answer_column or config.answer_column or "F"
+            
             data.append([
                 i,  # Sequential number
                 question.question_text,
                 dict(Question.QUESTION_TYPES).get(question.question_type, question.question_type),
                 f"{question.stage.stage_number}: {question.stage.stage_name}",
-                "Yes" if question.is_required else "No"
+                "Yes" if question.is_required else "No",
+                question_column,  # Custom column for question (or default)
+                answer_column     # Custom column for answer (or default)
             ])
         
         # Create a Questions sheet if it doesn't exist
@@ -316,11 +397,14 @@ def sync_questions_to_sheets():
             print(f"Error checking/creating Questions sheet: {e}")
             return {"success": False, "error": f"Error setting up Questions sheet: {str(e)}"}
         
+        # Calculate start row based on header row configuration
+        start_row = config.data_start_row if config.has_header_row else 1
+        
         # Clear existing data and update with new data
         try:
             sheets.values().clear(
                 spreadsheetId=sheet_id,
-                range="Questions!A:E"
+                range="Questions!A:G"
             ).execute()
             
             sheets.values().update(
