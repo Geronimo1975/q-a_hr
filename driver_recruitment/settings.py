@@ -202,12 +202,22 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
 
 # Email configuration
-# Temporarily using console backend for email while testing chatbot
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-# Keep SendGrid configuration for future use
+# Using SendGrid for email delivery
+EMAIL_BACKEND = 'sendgrid_backend.SendgridBackend'
 SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY', '')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'cucuiet.george@gmail.com')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'fastdelivery@gti-europe.de')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+# Toggle sandbox mode (when True, emails are logged but not sent)
+SENDGRID_SANDBOX_MODE_IN_DEBUG = DEBUG
+# Echo to stdout when in sandbox mode and emails are not sent
+SENDGRID_ECHO_TO_STDOUT = True
+
+# Email template configuration for reset password and other emails
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "FastDelivery - "
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = "https"
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
+ACCOUNT_EMAIL_VERIFICATION = "optional"
 
 # Google Sheets Integration
 GOOGLE_SHEETS = {

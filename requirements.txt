@@ -2,3 +2,4 @@
 django
 fpdf
 requests
+django-sendgrid-v5
