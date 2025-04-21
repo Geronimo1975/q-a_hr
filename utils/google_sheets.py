@@ -388,6 +388,7 @@ def update_answers_matrix(sheet_id=None):
         from recruitment.models import Question, Answer, QuestionStage
         from accounts.models import CustomUser
         from core.models import GoogleSheetsConfig
+        import time
         
         # Get the Google Sheets configuration
         config = GoogleSheetsConfig.objects.first()
@@ -415,6 +416,14 @@ def update_answers_matrix(sheet_id=None):
         # Get all users with at least one answer
         users = CustomUser.objects.filter(answers__isnull=False).distinct()
         
+        # If no users with answers, we can skip the update
+        if not users.exists():
+            return {"success": True, "count": 0, "message": "No users with answers found"}
+        
+        # If no questions, we also skip
+        if not questions.exists():
+            return {"success": True, "count": 0, "message": "No questions found"}
+        
         # Prepare column headers
         # First columns for user info
         headers = ["User Email", "First Name", "Last Name", "Phone Number"]
@@ -430,6 +439,15 @@ def update_answers_matrix(sheet_id=None):
         # Prepare data for the matrix
         matrix_data = [headers]  # First row is headers
         
+        # Fetch all answers from the database for efficiency
+        user_ids = [user.id for user in users]
+        all_answers = Answer.objects.select_related('question').filter(user_id__in=user_ids)
+        
+        # Create a dictionary of {(user_id, question_id): answer} for fast lookup
+        answers_dict = {}
+        for answer in all_answers:
+            answers_dict[(answer.user_id, answer.question_id)] = answer
+        
         # Add a row for each user
         for user in users:
             # Start with user info
@@ -440,14 +458,9 @@ def update_answers_matrix(sheet_id=None):
                 user.phone_number if hasattr(user, 'phone_number') else ""
             ]
             
-            # Get all answers for this user
-            answers_dict = {}
-            for answer in Answer.objects.filter(user=user):
-                answers_dict[answer.question_id] = answer
-            
             # Add each question's answer in order
             for question in questions:
-                answer = answers_dict.get(question.id)
+                answer = answers_dict.get((user.id, question.id))
                 if answer:
                     # Format answer based on question type
                     if question.question_type == 'file' and answer.file_upload:
@@ -474,13 +487,33 @@ def update_answers_matrix(sheet_id=None):
             
             matrix_data.append(user_row)
         
-        # Clear existing data and update with new data
+        # Update the sheet with the matrix data
         try:
-            # First clear existing data
+            # First check if the sheet exists
+            try:
+                spreadsheet = sheets.get(spreadsheetId=sheet_id).execute()
+                existing_sheets = [sheet['properties']['title'] for sheet in spreadsheet['sheets']]
+                
+                if 'AnswersMatrix' not in existing_sheets:
+                    sheets.batchUpdate(
+                        spreadsheetId=sheet_id,
+                        body={'requests': [{'addSheet': {'properties': {'title': 'AnswersMatrix'}}}]}
+                    ).execute()
+                    print("Created 'AnswersMatrix' sheet")
+                    # Small delay to avoid rate limit
+                    time.sleep(0.5)
+            except Exception as e:
+                print(f"Error checking/creating AnswersMatrix sheet: {e}")
+                # Continue anyway and try to update
+            
+            # Clear existing data
             sheets.values().clear(
                 spreadsheetId=sheet_id,
                 range=f"AnswersMatrix!A1:ZZ1000"  # Clear the whole sheet
             ).execute()
+            
+            # Give API a moment to process the clear request
+            time.sleep(0.5)
             
             # Skip update if no data
             if len(matrix_data) == 1:  # Just headers, no user data
@@ -491,7 +524,7 @@ def update_answers_matrix(sheet_id=None):
             cols = len(headers)
             last_col = get_column_letter(cols)
             
-            # Update with new data
+            # Update with new data in one call
             sheets.values().update(
                 spreadsheetId=sheet_id,
                 range=f"AnswersMatrix!A1:{last_col}{rows}",
@@ -516,6 +549,7 @@ def sync_questions_to_sheets():
         from core.models import GoogleSheetsConfig
         from accounts.models import CustomUser
         config = GoogleSheetsConfig.objects.first()
+        import time
         
         if not config or not config.enabled:
             return {"success": False, "error": "Google Sheets integration is not enabled in settings"}
@@ -523,6 +557,9 @@ def sync_questions_to_sheets():
         sheet_id = config.spreadsheet_id
         if not sheet_id:
             return {"success": False, "error": "No spreadsheet ID configured in Google Sheets settings"}
+        
+        # Ensure the sheet exists
+        create_sheet_if_needed(sheet_id)
         
         sheets = get_service()
         if not sheets:
@@ -541,14 +578,6 @@ def sync_questions_to_sheets():
             ["Nr.", "Question", "Question Type", "Stage", "Required"]
         ]
         
-        # Fetch all answers from the database for efficiency
-        all_answers = Answer.objects.select_related('user', 'question').all()
-        
-        # Create a dictionary of {(user_id, question_id): answer} for fast lookup
-        answer_dict = {}
-        for answer in all_answers:
-            answer_dict[(answer.user_id, answer.question_id)] = answer
-            
         # Add questions with sequential numbering
         for i, question in enumerate(questions, 1):
             # Add question details
@@ -563,82 +592,117 @@ def sync_questions_to_sheets():
         
         # Add data to Google Sheets
         try:
-            # Clear existing questions data
+            # Get all users with at least one answer for preparing user headers
+            users = CustomUser.objects.filter(answers__isnull=False).distinct()
+            
+            # Prepare combined data including headers and all question rows
+            # This reduces the number of API calls by sending all data at once
+            all_values = data.copy()
+            
+            # Add user headers in the first row (starting at column F)
+            user_headers = ["user" + str(i+1) for i in range(len(users))]
+            if len(user_headers) > 0:
+                # Extend the first row with user headers
+                all_values[0].extend(user_headers)
+                
+                # Now add empty cells for all other rows to maintain grid structure
+                for i in range(1, len(all_values)):
+                    all_values[i].extend([""] * len(user_headers))
+            
+            # Now let's update the entire sheet with one API call
+            # First clear the sheet
             sheets.values().clear(
                 spreadsheetId=sheet_id,
-                range="Questions!A1:E1000"  # Clear only fixed columns
+                range="Questions!A1:ZZ1000"  # Clear the whole sheet
             ).execute()
             
-            # Add question data (A-E columns)
+            # Give API a moment to process the clear request
+            time.sleep(0.5)
+            
+            # Then update with all our data in one go
             sheets.values().update(
                 spreadsheetId=sheet_id,
                 range="Questions!A1",
                 valueInputOption="RAW",
-                body={"values": data}
+                body={"values": all_values}
             ).execute()
             
-            # Now let's add user data in columns starting from F
-            # Get all users with at least one answer
-            users = CustomUser.objects.filter(answers__isnull=False).distinct()
-            
-            # No users with answers yet, so just return success
-            if not users.exists():
-                return {"success": True, "count": len(questions)}
+            # If there are users with answers, we'll now add their answers
+            if users.exists():
+                # Fetch all answers from the database for efficiency
+                all_answers = Answer.objects.select_related('user', 'question').all()
                 
-            # Add user emails as headers in row 1, starting at column F
-            user_headers = [["user" + str(i+1)] for i in range(len(users))]
-            if user_headers:
-                sheets.values().update(
-                    spreadsheetId=sheet_id,
-                    range="Questions!F1",
-                    valueInputOption="RAW",
-                    body={"values": [["user" + str(i+1) for i in range(len(users))]]}
-                ).execute()
-            
-            # For each user, add their answers in the corresponding column
-            for user_idx, user in enumerate(users):
-                # Column F is the first user column (index 5)
-                user_col = get_column_letter(6 + user_idx)  # F, G, H, etc.
+                # Create a dictionary of {(user_id, question_id): answer} for fast lookup
+                answer_dict = {}
+                for answer in all_answers:
+                    answer_dict[(answer.user_id, answer.question_id)] = answer
                 
-                # For each question, get this user's answer
-                user_answers = []
-                for question_idx, question in enumerate(questions):
-                    row_idx = question_idx + 2  # Questions start at row 2
+                # Build a batch of value ranges to update all answers with one batch request
+                value_ranges = []
+                
+                # For each user, prepare their answers
+                for user_idx, user in enumerate(users):
+                    # Column F is the first user column (index 5)
+                    user_col = get_column_letter(6 + user_idx)  # F, G, H, etc.
                     
-                    # Look up the answer
-                    answer = answer_dict.get((user.id, question.id))
-                    
-                    if answer:
-                        # Format the answer based on question type
-                        if question.question_type == 'file' and answer.file_upload:
-                            # For file uploads, add a link
-                            from django.conf import settings
-                            if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
-                                formatted_answer = f"{settings.BASE_URL}{answer.file_upload.url}"
+                    # For each question, get this user's answer
+                    for question_idx, question in enumerate(questions):
+                        row_idx = question_idx + 2  # Questions start at row 2
+                        
+                        # Look up the answer
+                        answer = answer_dict.get((user.id, question.id))
+                        
+                        if answer:
+                            # Format the answer based on question type
+                            if question.question_type == 'file' and answer.file_upload:
+                                # For file uploads, add a link
+                                from django.conf import settings
+                                if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
+                                    formatted_answer = f"{settings.BASE_URL}{answer.file_upload.url}"
+                                else:
+                                    formatted_answer = f"File: {answer.file_upload.name.split('/')[-1]}"
+                            elif question.question_type == 'dob' and answer.answer_text:
+                                # Format dates
+                                try:
+                                    from datetime import datetime
+                                    date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
+                                    formatted_answer = date_obj.strftime('%d.%m.%Y')
+                                except:
+                                    formatted_answer = answer.answer_text
                             else:
-                                formatted_answer = f"File: {answer.file_upload.name.split('/')[-1]}"
-                        elif question.question_type == 'dob' and answer.answer_text:
-                            # Format dates
-                            try:
-                                from datetime import datetime
-                                date_obj = datetime.strptime(answer.answer_text, '%Y-%m-%d')
-                                formatted_answer = date_obj.strftime('%d.%m.%Y')
-                            except:
+                                # Standard text answer
                                 formatted_answer = answer.answer_text
-                        else:
-                            # Standard text answer
-                            formatted_answer = answer.answer_text
+                                
+                            # Add the answer to our batch
+                            value_ranges.append({
+                                "range": f"Questions!{user_col}{row_idx}",
+                                "values": [[formatted_answer]]
+                            })
+                
+                # If we have answers to update, do it in batches of 10 to avoid rate limits
+                batch_size = 10
+                for i in range(0, len(value_ranges), batch_size):
+                    batch = value_ranges[i:i+batch_size]
+                    
+                    if batch:
+                        try:
+                            # Update in batch
+                            sheets.values().batchUpdate(
+                                spreadsheetId=sheet_id,
+                                body={
+                                    "valueInputOption": "RAW",
+                                    "data": batch
+                                }
+                            ).execute()
                             
-                        # Add the answer to the user's column at the question's row
-                        sheets.values().update(
-                            spreadsheetId=sheet_id,
-                            range=f"Questions!{user_col}{row_idx}",
-                            valueInputOption="RAW",
-                            body={"values": [[formatted_answer]]}
-                        ).execute()
+                            # Add a small delay to avoid hitting rate limits
+                            time.sleep(0.5)
+                        except Exception as e:
+                            print(f"Error updating batch {i//batch_size + 1}: {e}")
+                            # Continue with other batches
             
-            # Also update the answers matrix when we're done
-            update_answers_matrix(sheet_id)
+            # Skip automatic update of answers matrix to avoid hitting rate limits
+            # User can manually click that button later
             
             return {"success": True, "count": len(questions)}
         except Exception as e:
